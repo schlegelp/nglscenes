@@ -1,3 +1,5 @@
+[![Tests](https://github.com/schlegelp/nglscenes/actions/workflows/test-package.yml/badge.svg)](https://github.com/schlegelp/nglscenes/actions/workflows/test-package.yml)
+
 # nglscenes
 A low-level interface to generate and manipulate neuroglancer scenes.
 
