@@ -14,3 +14,6 @@
 
 from .scenes import *
 from .layers import *
+from .local import *
+
+from . import examples

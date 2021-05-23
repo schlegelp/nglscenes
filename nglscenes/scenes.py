@@ -16,18 +16,19 @@ import copy
 import json
 import pyperclip
 import webbrowser
+import inspect
 
 from urllib.parse import quote, urldefrag
 
 from . layers import (ImageLayer, SegmentationLayer, AnnotationLayer,
-                      MeshLayer, BaseLayer)
+                      MeshLayer, BaseLayer, LayerManager)
 from . import utils
 
 
-__all__ = ['NeuroGlancerScene']
+__all__ = ['Scene']
 
 
-class NeuroGlancerScene:
+class Scene:
     """A NeuroGlancer scene.
 
     Parameters
@@ -37,27 +38,39 @@ class NeuroGlancerScene:
 
     """
 
-    _properties = {}
+    # REMOVING THIS BREAKS COPYING
+    _state = {}
 
     def __init__(self, base_url='https://neuroglancer-demo.appspot.com/'):
-        self.__dict__['base_url'] = base_url
-        self.__dict__['_layers'] = []
-        self.__dict__['_properties'] = {}
-        self.__dict__['_stale'] = True
-        self.__dict__['_url'] = ''
+        self._base_url = base_url
+        self._layers = []
+        self.state = {}
+        self._url = ''
+        self._layermanager = LayerManager(self)
 
     @property
     def layers(self):
-        """Layers present."""
-        return self._layers
+        """Managed layers present."""
+        return self._layermanager
 
     @layers.setter
     def layers(self):
         raise AttributeError('Please use `.add_layers()` to edit the layers.')
 
     @property
-    def properties(self):
-        return self._properties
+    def state(self):
+        """JSON state of scene."""
+        return self._state
+
+    @state.setter
+    def state(self, value):
+        def set_stale():
+            self._stale = True
+
+        if not isinstance(value, dict):
+            raise TypeError('State must be a dictionary')
+        value = utils.add_on_change_callback(value, callback=set_stale)
+        self._state = value
 
     @property
     def type(self):
@@ -71,20 +84,21 @@ class NeuroGlancerScene:
         return self._url
 
     def __add__(self, other):
-        if not isinstance(other, NeuroGlancerScene):
+        if not isinstance(other, Scene):
             raise NotImplementedError(f'Unable to combine {type(other)} with '
                                       f'{self.type}')
         x = copy.deepcopy(self)
-        x.layers += copy.deepcopy(other.layers)
+        x.add_layers(*copy.deepcopy(other._layers))
+
         return x
 
     def __or__(self, other):
-        if not isinstance(other, NeuroGlancerScene):
+        if not isinstance(other, Scene):
             raise NotImplementedError(f'Unable to merge {type(other)} with '
                                       f'{self.type}')
 
         x = copy.deepcopy(self)
-        for l1 in copy.deepcopy(other.layers):
+        for l1 in copy.deepcopy(other._layers):
             merged = False
             for l2 in x.layers:
                 if isinstance(l1, type(l2)):
@@ -92,8 +106,10 @@ class NeuroGlancerScene:
                         l2 |= l1
                         merged = True
                         break
-                    except BaseException:
+                    except NotImplementedError:
                         pass
+                    except BaseException:
+                        raise
             if not merged:
                 x.add_layers(l1)
 
@@ -102,23 +118,42 @@ class NeuroGlancerScene:
     def __eq__(self, other):
         if type(other) != type(self):
             return False
-        if self.properties != other.properties:
+        if self.state != other.state:
             return False
         return True
 
-    def __setattr__(self, name, value):
+    def __getstate__(self):
+        """Get state (used e.g. for pickling)."""
+        state = dict(self.__dict__)
+
+        # Drop layermanager
+        _ = state.pop('_layermanager', None)
+
+        # Set viewer to None if present
+        if '_viewer' in state:
+            state['_viewer'] = None
+
+        return state
+
+    def __setstate__(self, d):
+        """Set state (used e.g. for unpickling)."""
+        # We have to implement this to make sure
+        self.__dict__.clear()
+        for k, v in d.items():
+            self.__dict__[k] = v
+
+        self._layermanager = LayerManager(self)
+
+    def __setitem__(self, name, value):
         """Set a scene attribute."""
-        self._properties[name] = value
-        self.__dict__['_stale'] = True
+        self._state[name] = value
+        self._stale = True
 
-    def __getattr__(self, name):
-        if name in self.__dict__:
-            return self.__dict__.get(name)
-
+    def __getitem__(self, name):
         """Get a scene property."""
-        if name not in self._properties:
-            raise AttributeError(f'"{name}" not in scene properties.')
-        return self._properties[name]
+        if name in self.state:
+            return self.state[name]
+        raise AttributeError(f'"{name}" not in state.')
 
     def __len__(self):
         return len(self.layers)
@@ -145,19 +180,21 @@ class NeuroGlancerScene:
     def from_string(cls, scene):
         """Generate scene from either a JSON or URL."""
         # Extract json
-        properties = utils.parse_json_scene(scene)
+        state = utils.parse_json_scene(scene)
 
         # If input is URL, reuse the base URL
-        if utils.is_url(scene):
+        sig = inspect.signature(cls)
+        has_url = 'url' in sig.parameters or 'base_url' in sig.parameters
+        if utils.is_url(scene) and has_url:
             url, frag = urldefrag(scene)
-            x = cls(url)
+            x = cls(base_url=url)
         else:
             x = cls()
 
-        layers = parse_layers(properties.pop('layers'))
+        layers = parse_layers(state.pop('layers'))
 
         # Update properties
-        x.properties.update(properties)
+        x._state.update(state)
 
         if layers:
             x.add_layers(*layers)
@@ -166,6 +203,8 @@ class NeuroGlancerScene:
 
     def add_layers(self, *layers):
         """Add layer to scene.
+
+        Non-unique names will be given a suffix, e.g. "-2".
 
         Parameters
         ----------
@@ -177,8 +216,22 @@ class NeuroGlancerScene:
             if not isinstance(l, BaseLayer):
                 raise TypeError(f'Expected Layer, got {type(l)}')
 
+            # We are enforcing unique name here
+            i = 2
+            org_name = str(l.name)
+            while l['name'] in self.layers:
+                if i <= 2:
+                    l['name'] = f'{org_name}-{i}'
+                else:
+                    l['name'] = f'{org_name}-{i}'
+                i += 1
+
             self._layers.append(l)
-            self.__dict__['_stale'] = True
+            self._stale = True
+
+    def copy(self):
+        """Return copy."""
+        return copy.deepcopy(self)
 
     def drop_layer(self, which):
         """Remove layer from scene.
@@ -189,26 +242,29 @@ class NeuroGlancerScene:
                     Either index (int) or name (str) of layer to drop.
 
         """
-        self.__dict__['_stale'] = True
+        self._stale = True
         if isinstance(which, str):
-            names = [getattr(l, 'name', None) for l in self.layers]
-            if which not in names:
+            if which not in self.layers:
                 raise ValueError(f'No layer named "{which}".')
-            self._layers.pop(names.index(which))
+            ix = [i for i, l in enumerate(self._layers) if getattr(l, 'name', None) == which][0]
+            return self._layers.pop(ix)
         elif isinstance(which, int):
-            if len(self.layers) < (which + 1):
+            if len(self.layers) <= which:
                 raise ValueError(f'Unable to drop layer {which}: only '
                                  f'{len(self.layers)} present.')
-            self._layers.pop(which)
+            return self._layers.pop(which)
         else:
             raise TypeError(f'Expected str or int, got {type(which)}')
 
-    def make_json(self, pretty=False):
-        """Generate the JSON-formatted string describing the scene."""
-        props = self.properties
-        props['layers'] = [l.as_dict() for l in self.layers]
+    def as_dict(self):
+        """Generate a dictionary of the JSON state."""
+        state = utils.remove_callback(self.state)
+        state['layers'] = [l.as_dict() for l in self.layers]
+        return utils.remove_callback(state)
 
-        return json.dumps(props,
+    def to_json(self, pretty=False):
+        """Generate the JSON-formatted string describing the scene."""
+        return json.dumps(self.as_dict(),
                           indent=4 if pretty else None,
                           sort_keys=True,
                           ).replace("'", '"'
@@ -217,9 +273,9 @@ class NeuroGlancerScene:
 
     def make_url(self):
         """Generate/Update URL."""
-        scene_str = self.make_json(pretty=False)
-        self.__dict__['_url'] = utils.make_url(self.base_url, f'#!{quote(scene_str)}')
-        self.__dict__['_stale'] = False
+        scene_str = self.to_json(pretty=False)
+        self._url = utils.make_url(self._base_url, f'#!{quote(scene_str)}')
+        self._stale = False
         return self._url
 
     def open(self, new_window=False):
@@ -237,7 +293,7 @@ class NeuroGlancerScene:
     def to_clipboard(self, scene_only=False):
         """Copy URL to clipboard."""
         if scene_only:
-            pyperclip.copy(self.make_json(pretty=True))
+            pyperclip.copy(self.to_json(pretty=True))
             print('Scene copied to clipboard.')
         else:
             pyperclip.copy(self.url)

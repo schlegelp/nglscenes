@@ -13,10 +13,148 @@
 #    GNU General Public License for more details.
 """Collection of utility functions."""
 
+import functools
 import requests
 import json
 
 from urllib.parse import urlparse, urlencode, unquote
+
+
+class CallBackDict(dict):
+    """A dictionary that executes a callback on change."""
+    def __init__(self, callback, *args, **kwargs):
+        assert callable(callback)
+        self._callback = callback
+        super().__init__(*args, **kwargs)
+
+    def __setitem__(self, key, val):
+        # Add callback to any container in `val` (including val itself)
+        val = add_on_change_callback(val, self._callback, recursive=True)
+        super().__setitem__(key, val)
+        self._callback()
+
+    @functools.wraps(dict.update)
+    def update(self, *args, **kwargs):
+        new_dict = dict(*args, **kwargs)
+        new_dict = add_on_change_callback(new_dict, self._callback, recursive=True)
+        super().update(**new_dict)
+        self._callback()
+
+    @functools.wraps(dict.pop)
+    def pop(self, *args, **kwargs):
+        super().pop(*args, **kwargs)
+        self._callback()
+
+    @functools.wraps(dict.clear)
+    def clear(self, *args, **kwargs):
+        super().clear(*args, **kwargs)
+        self._callback()
+
+
+class CallBackList(list):
+    """A list that executes a callback on change."""
+    def __init__(self, callback, *args, **kwargs):
+        assert callable(callback)
+        self._callback = callback
+        super().__init__(*args, **kwargs)
+
+    def __setitem__(self, key, val):
+        # Add callback to any container in `val` (including val itself)
+        val = add_on_change_callback(val, self._callback, recursive=True)
+        super().__setitem__(key, val)
+        self._callback()
+
+    @functools.wraps(list.append)
+    def append(self, object):
+        object = add_on_change_callback(object, self._callback, recursive=True)
+        super().append(object)
+        self._callback()
+
+    @functools.wraps(list.pop)
+    def pop(self, index=-1):
+        super().pop(index)
+        self._callback()
+
+    @functools.wraps(list.extend)
+    def extend(self, iterable):
+        iterable = add_on_change_callback(iterable, self._callback, recursive=True)
+        super().extend(iterable)
+        self._callback()
+
+    @functools.wraps(list.sort)
+    def sort(self, *, key=None, reverse=False):
+        super().sort(key=None, reverse=False)
+        self._callback()
+
+    @functools.wraps(list.insert)
+    def insert(self, index, object):
+        object = add_on_change_callback(object, self._callback, recursive=True)
+        super().insert(index, object)
+        self._callback()
+
+    @functools.wraps(list.remove)
+    def remove(self, value):
+        super().remove(value)
+        self._callback()
+
+
+def add_on_change_callback(x, callback, recursive=True):
+    """Adds callback to object.
+
+    Converts containers (currrently list dict and dicts) to CallBack{TYPE} and
+    adds callback.
+
+    Parameters
+    ----------
+    x :         list | dict
+    callback :  callable
+                The callback function. Will be called without arguments.
+    recursive : bool
+                If True, will recursively convert the input.
+
+    Returns
+    -------
+    dict | list
+
+    """
+    if isinstance(x, dict):
+        if recursive:
+            x = {k: add_on_change_callback(v, callback, True) for k, v in x.items()}
+        if not isinstance(x, CallBackDict):
+            x = CallBackDict(callback, **x)
+    elif isinstance(x, list):
+        if recursive:
+            x = [add_on_change_callback(v, callback, True) for v in x]
+        if not isinstance(x, CallBackList):
+            x = CallBackList(callback, x)
+    return x
+
+
+def remove_callback(x, recursive=True):
+    """Remove callback from object.
+
+    Parameters
+    ----------
+    x :         list | dict
+    recursive : bool
+                If True, will recursively convert the input.
+
+    Returns
+    -------
+    dict | list
+
+    """
+    if isinstance(x, dict):
+        if recursive:
+            x = {k: remove_callback(v, True) for k, v in x.items()}
+        if isinstance(x, CallBackDict):
+            x = dict(**x)
+    elif isinstance(x, list):
+        if recursive:
+            x = [remove_callback(v, True) for v in x]
+        if not isinstance(x, CallBackList):
+            x = list(x)
+    return x
 
 
 def parse_json_scene(scene):

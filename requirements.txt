@@ -1,5 +1,6 @@
 requests
 matplotlib
+neuroglancer
 numpy
 pandas
 pyperclip
