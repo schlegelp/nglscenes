@@ -12,23 +12,168 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 
+import copy
 import neuroglancer
 import logging
+import io
 
-from . layers import BaseLayer
+import pandas as pd
+
+from collections import OrderedDict
+from pathlib import Path
+from zipfile import ZipFile
+
 from .scenes import Scene
+from .layers import BaseLayer
 from .utils import add_on_change_callback, remove_callback
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['LocalScene']
+__all__ = ['LocalScene', 'LocalSkeletonLayer']
+
+
+class LocalSkeletonLayer(BaseLayer):
+    """A local data layer for skeletons.
+
+    This will only work with LocalScenes.
+
+    Parameters
+    ----------
+    source :        str | callable
+                    Either a directory or zip file containing SWC files, or a
+                    function that accepts and ID and returns a neuroglancer
+                    Skeleton.
+    units,scales :  str, list of int
+                    Units and scale the skeletons are in.
+    **kwargs
+                    Additional properties for the layer.
+
+    """
+
+    DEFAULTS = OrderedDict({'source': '',
+                            'type': 'segmentation',
+                            'name': 'skeletons'})
+    MUST_HAVE = ['name', 'source']
+
+    NG_LAYER = neuroglancer.SegmentationLayer
+
+    def __init__(self, source, units='nm', scales=[1, 1, 1], **kwargs):
+        self.dimensions = neuroglancer.CoordinateSpace(names=['x', 'y', 'z'],
+                                                       units=units,
+                                                       scales=scales)
+
+        props = copy.deepcopy(self.DEFAULTS)
+        props['source'] = LocalSkeletonSource(source, self.dimensions)
+        props.update(**kwargs)
+        super().__init__(**props)
+
+    def push_state(self, on_error='raise'):
+        """Push state to neuroglancer viewer."""
+        if not self.viewer:
+            raise ValueError('Layer is not linked to a neuroglancer viewer.')
+
+        with self.viewer.txn() as s:
+            state = s.to_json()
+            ix = [i for i, l in enumerate(state.get('layers', [])) if l.get('name', None) == self.name]
+            if not ix:
+                raise ValueError(f'Layer "{self.name}" not found in '
+                                 'neuroglancer viewer.')
+            elif len(ix) > 1:
+                raise ValueError(f'Layer "{self.name}" duplicated.')
+
+            # Update states
+            this_state = {k: v for k, v in self._state.items() if k not in ['source']}
+            state['layers'][ix[0]].update(this_state)
+
+        self.viewer.set_state(state)
+
+        logger.debug(f'State pushed from layer: {state}')
+
+
+class LocalSkeletonSource(neuroglancer.skeleton.SkeletonSource):
+    """A local skeleton source."""
+
+    def __init__(self, source, dimensions):
+        if callable(source):
+            self.source = source
+        else:
+            source = Path(source)
+            if source.is_file():
+                if not source.name.endswith('.zip'):
+                    raise ValueError(f'Invalid skeleton source: {source}')
+            elif not source.is_dir():
+                raise ValueError(f'Invalid skeleton source: {source}')
+
+        super().__init__(dimensions)
+        self.source = source
+
+    def get_skeleton(self, id):
+        if callable(self.source):
+            return self.source(id)
+        elif self.source.name.endswith('.zip'):
+            return self.read_from_zip(f'{id}.swc')
+        else:
+            return self.read_from_swc(self.source / f'{id}.swc')
+
+    def read_from_zip(self, file, zip):
+        """Read skeleton from SWC file inside a ZIP archive.
+
+        Parameters
+        ----------
+        file :      str
+
+        Returns
+        -------
+        neuroglancer.Skeleton
+
+        """
+        with ZipFile(self.source, 'r') as zip:
+            return self.read_from_swc(io.StringIO(zip.read(file).decode()))
+
+    def read_from_swc(self, file):
+        """Read skeleton from SWC file (or buffer).
+
+        Parameters
+        ----------
+        file :      str
+
+        Returns
+        -------
+        neuroglancer.Skeleton
+
+        """
+        if isinstance(file, io.StringIO):
+            if isinstance(file.read(0), bytes):
+                file = io.TextIOWrapper(file, encoding="utf-8")
+        elif not (self.source / file).is_file():
+            return None
+
+        swc = pd.read_csv(file,
+                          delimiter=' ',
+                          skipinitialspace=True,
+                          comment='#',
+                          header=None)
+
+        swc.columns = ['PointNo', 'Label', 'X', 'Y', 'Z', 'Radius', 'Parent']
+
+        # Make sure points are in ascending order (should really already)
+        swc.sort_values('PointNo', inplace=True)
+
+        # In case node IDs start at 1
+        swc['Parent'] -= swc['PointNo'].min()
+        swc['PointNo'] -= swc['PointNo'].min()
+
+        return neuroglancer.skeleton.Skeleton(
+                                vertex_positions=swc[['X', 'Y', 'Z']].values,
+                                edges=swc.loc[swc.Parent >= 0,
+                                              ['Parent', 'PointNo']].values)
 
 
 class LocalScene(Scene):
     """A scene served via and synced to a local neuroglancer server."""
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         del self._url
         self._viewer = None
         self._lock = False

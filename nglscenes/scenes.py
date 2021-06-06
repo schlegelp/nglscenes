@@ -41,10 +41,10 @@ class Scene:
     # REMOVING THIS BREAKS COPYING
     _state = {}
 
-    def __init__(self, base_url='https://neuroglancer-demo.appspot.com/'):
+    def __init__(self, base_url='https://neuroglancer-demo.appspot.com/', **kwargs):
         self._base_url = base_url
         self._layers = []
-        self.state = {}
+        self.state = kwargs
         self._url = ''
         self._layermanager = LayerManager(self)
 
