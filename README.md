@@ -134,6 +134,11 @@ OrderedDict([('source',
 >>> scene.layers[-1]['visible'] = False
 >>> # Get the same layer by name and unhide
 >>> scene.layers['annotations']['visible'] = True
->>> # Add segments
->>> scene.layers[1]['segments'] = []
+>>> # Set selected segments
+>>> scene.layers[1]['segments'] = [5280982928, 5517604362]
+
+>>> # Serve skeletons from a local folder containing SWC files
+>>> # (this also works from a zip file)
+>>> scene.add_layers(LocalSkeletonLayer(LocalSkeletonLayer(source='~/skeletons/')))
+>>> scene.layers[-1]['segments'] = [123456]
 ```
