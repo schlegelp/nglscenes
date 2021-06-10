@@ -155,7 +155,12 @@ class Scene:
             return self.state[name]
         raise AttributeError(f'"{name}" not in state.')
 
+    def __contains__(self, name):
+        """Check if attribute is in state."""
+        return name in self._state
+
     def __len__(self):
+        """Return number of layers in scene."""
         return len(self.layers)
 
     def __str__(self):

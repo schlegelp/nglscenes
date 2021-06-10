@@ -95,7 +95,7 @@ class LocalSkeletonSource(neuroglancer.skeleton.SkeletonSource):
 
     def __init__(self, source, dimensions):
         if callable(source):
-            self.source = source
+            pass
         else:
             source = Path(source)
             if source.is_file():
@@ -115,7 +115,7 @@ class LocalSkeletonSource(neuroglancer.skeleton.SkeletonSource):
         else:
             return self.read_from_swc(self.source / f'{id}.swc')
 
-    def read_from_zip(self, file, zip):
+    def read_from_zip(self, file):
         """Read skeleton from SWC file inside a ZIP archive.
 
         Parameters
@@ -128,6 +128,9 @@ class LocalSkeletonSource(neuroglancer.skeleton.SkeletonSource):
 
         """
         with ZipFile(self.source, 'r') as zip:
+            if file not in zip.namelist():
+                print(f'File {file} not found in zip.')
+                return None
             return self.read_from_swc(io.StringIO(zip.read(file).decode()))
 
     def read_from_swc(self, file):
