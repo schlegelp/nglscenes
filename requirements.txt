@@ -7,3 +7,4 @@ pyperclip
 trimesh
 flask
 flask-cors
+cloud-volume
