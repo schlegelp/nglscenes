@@ -4,3 +4,6 @@ neuroglancer
 numpy
 pandas
 pyperclip
+trimesh
+flask
+flask-cors

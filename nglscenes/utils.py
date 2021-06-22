@@ -17,6 +17,8 @@ import functools
 import requests
 import json
 
+import numpy as np
+
 from urllib.parse import urlparse, urlencode, unquote
 
 
@@ -210,3 +212,38 @@ def make_url(*args, **GET):
     if GET:
         url += '?{}'.format(urlencode(GET))
     return url
+
+
+def to_precomputed_mesh(vertices, faces):
+    """Convert mesh to precomputed format.
+
+    Parameters
+    ----------
+    vertices :      (N, 3) list-like
+    faces :         (M, 3) list-like
+
+    Returns
+    -------
+    str
+                    Bytes string.
+
+    """
+    vertices = np.asarray(vertices, dtype='float32')
+    faces = np.asarray(faces, dtype='uint32')
+    vertex_index_format = [np.uint32(vertices.shape[0]),
+                           vertices, faces]
+
+    return b''.join([array.tobytes('C') for array in vertex_index_format])
+
+
+def find_name(name, scene, default):
+    """Find a name that's not already in the scene."""
+    if not name:
+        name = default
+
+    i = 1
+    while name in scene.layers:
+        name = f'skeletons{i}'
+        i += 1
+
+    return name

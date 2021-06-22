@@ -19,6 +19,7 @@
 
 from .local import LocalScene
 from .layers import ImageLayer, SegmentationLayer, AnnotationLayer
+from .flywire import LocalFlywireMeshLayer
 
 
 class FAFBScene(LocalScene):
@@ -37,15 +38,43 @@ class FAFBScene(LocalScene):
 
         # Add annotation layer
         self.add_layers(AnnotationLayer(source="precomputed://gs://neuroglancer-20191211_fafbv14_buhmann2019_li20190805",
-                                        linkedSegmentationLayer={
-                                                                   "pre_segment": "fafb-ffn1-20200412",
-                                                                    "post_segment": "fafb-ffn1-20200412"
-                                                                    },
+                                        linkedSegmentationLayer={"pre_segment": "fafb-ffn1-20200412",
+                                                                 "post_segment": "fafb-ffn1-20200412"},
                                         annotationColor="#cecd11",
                                         shader="#uicontrol vec3 preColor color(default=\"blue\")\n#uicontrol vec3 postColor color(default=\"red\")\n#uicontrol float scorethr slider(min=0, max=1000)\n#uicontrol int showautapse slider(min=0, max=1)\n\nvoid main() {\n  setColor(defaultColor());\n  setEndpointMarkerColor(\n    vec4(preColor, 0.5),\n    vec4(postColor, 0.5));\n  setEndpointMarkerSize(5.0, 5.0);\n  setLineWidth(2.0);\n  if (int(prop_autapse()) > showautapse) discard;\n  if (prop_score()<scorethr) discard;\n}\n\n",
                                         shaderControls={"scorethr": 80},
-                                        filterBySegmentation=[
-                                                                "post_segment",
-                                                                "pre_segment"
-                                                                 ],
+                                        filterBySegmentation=["post_segment",
+                                                              "pre_segment"],
                                         name='synapses_buhmann2019'))
+
+
+class FlyWireScene(LocalScene):
+    """NeuroGlancer scene containing FlyWire data (meshes, FAFB14 image data)."""
+    def __init__(self):
+        super().__init__()
+
+        # Add image layer
+        self.add_layers(ImageLayer(source='precomputed://gs://neuroglancer-fafb-data/fafb_v14/fafb_v14_clahe',
+                                   name='fafb_v14_clahe'))
+
+        # Add FlyWire mesh layer
+        self.add_layers(LocalFlywireMeshLayer(segments=["720575940621039145"]))
+
+        # Add FAFB mesh
+        self.add_layers(SegmentationLayer(source="precomputed://https://spine.janelia.org/files/eric/jfrc_mesh_test",
+                                          name='fafb-neuropil',
+                                          selectedAlpha=0,
+                                          objectAlpha=0.05,
+                                          segmentColor={"1": '#ffffff'},
+                                          segments=["1"]))
+
+        # For some reason it won't work if try I initializing the scene with
+        # these settings
+        self.state.update({"position": [538699, 221231, 131019],
+                           "dimensions": {"x": [1e-9, "m"],
+                                          "y": [1e-9, "m"],
+                                          "z": [1e-9, "m"]},
+                           "layout": "3d",
+                           "showSlices": False,
+                           "projectionScale": 365017})
+        self.push_state()

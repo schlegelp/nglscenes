@@ -18,6 +18,8 @@ import logging
 import io
 
 import pandas as pd
+import numpy as np
+import trimesh as tm
 
 from collections import OrderedDict
 from pathlib import Path
@@ -25,11 +27,47 @@ from zipfile import ZipFile
 
 from .scenes import Scene
 from .layers import BaseLayer
-from .utils import add_on_change_callback, remove_callback
+from .utils import (add_on_change_callback, remove_callback,
+                    to_precomputed_mesh, find_name)
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['LocalScene', 'LocalSkeletonLayer']
+__all__ = ['LocalScene', 'LocalSkeletonLayer', 'LocalMeshLayer']
+
+
+class LocalMeshLayer(BaseLayer):
+    """A local data layer for a single mesh.
+
+    This will only work with LocalScenes.
+
+    Parameters
+    ----------
+    source :        str | callable
+                    Either a directory or zip file containing SWC files, or a
+                    function that accepts and ID and returns a neuroglancer
+                    Skeleton.
+    units,scales :  str, list of int
+                    Units and scale the skeletons are in.
+    **kwargs
+                    Additional properties for the layer.
+
+    """
+
+    DEFAULTS = OrderedDict({'source': '',
+                            'type': 'mesh',
+                            'name': 'mesh'})
+    MUST_HAVE = ['name', 'source']
+
+    NG_LAYER = neuroglancer.SegmentationLayer
+
+    def __init__(self, source, units='nm', scales=[1, 1, 1], **kwargs):
+        self.dimensions = neuroglancer.CoordinateSpace(names=['x', 'y', 'z'],
+                                                       units=units,
+                                                       scales=scales)
+        props = copy.deepcopy(self.DEFAULTS)
+        props['source'] = LocalMeshSource(source, self.dimensions, **kwargs)
+        props.update(**kwargs)
+        super().__init__(**props)
 
 
 class LocalSkeletonLayer(BaseLayer):
@@ -88,6 +126,94 @@ class LocalSkeletonLayer(BaseLayer):
         self.viewer.set_state(state)
 
         logger.debug(f'State pushed from layer: {state}')
+
+
+class CatmaidSkeletonLayer(LocalSkeletonLayer):
+    pass
+
+
+class LocalMeshSource(neuroglancer.LocalVolume):
+    """A local mesh source."""
+
+    def __init__(self, source, dimensions, **kwargs):
+        if callable(source):
+            pass
+        else:
+            source = Path(source)
+            if source.is_file():
+                if not source.name.endswith('.zip'):
+                    raise ValueError(f'Invalid skeleton source: {source}')
+            elif not source.is_dir():
+                raise ValueError(f'Invalid skeleton source: {source}')
+
+        # Initialize with mock data
+        kwargs['volume_type'] = 'segmentation'
+        kwargs['dimensions'] = dimensions
+        super().__init__(np.random.randint(0, 100, size=(10, 10, 10), dtype=np.uint8), **kwargs)
+        self.source = source
+
+    def get_object_mesh(self, object_id):
+        vertices = np.array([[0, 0, 0],
+                             [1, 1, 1],
+                             [0, 1, 0]])
+        faces = np.array([[0, 1, 2]])
+        return to_precomputed_mesh(vertices, faces)
+
+        """Read mesh for given object and return in precomputed format."""
+        if callable(self.source):
+            return self.source(object_id)
+        elif self.source.name.endswith('.zip'):
+            return self.read_from_zip(object_id)
+        else:
+            try:
+                # Try finding a file that has a matching name
+                file = next(self.source.glob(f'{object_id}.*')).name
+            except StopIteration:
+                print(f'Object {object_id} not found in directory.')
+                return None
+            try:
+                # Try reading that file
+                return self.read_file(file)
+            except BaseException:
+                print(f'File {file} could not be read.')
+                return None
+
+    def read_file(self, file):
+        """Read mesh from file."""
+        if not (self.source / file).is_file():
+            return None
+
+        mesh = tm.load_mesh(self.source / file)
+
+        return to_precomputed_mesh(mesh.vertices, mesh.faces)
+
+    def read_buffer(self, buffer, file_type):
+        """Read mesh from buffer."""
+        mesh = tm.load_mesh(buffer, file_type=file_type)
+
+        return to_precomputed_mesh(mesh.vertices, mesh.faces)
+
+    def read_from_zip(self, object_id):
+        """Read mesh from inside a ZIP archive.
+
+        Parameters
+        ----------
+        object_id :     str | int
+
+        Returns
+        -------
+        str
+                        Bytes string of precomputed format.
+
+        """
+        with ZipFile(self.source, 'r') as zip:
+            for file in zip.namelist():
+                if file.startswith(f'{object_id}.'):
+                    return self.read_buffer(io.StringIO(zip.read(file).decode()),
+                                            file_type=file.split('.')[-1])
+
+        print(f'File {file} not found in zip.')
+        return None
 
 
 class LocalSkeletonSource(neuroglancer.skeleton.SkeletonSource):
@@ -236,6 +362,46 @@ class LocalScene(Scene):
             # Link layer to viewer
             # The layer then takes care of the syncing
             l.link_viewer(self.viewer)
+
+    def add_local_skeletons(self, source, name=None, **kwargs):
+        """Add a layer for a local skeleton source.
+
+        Parameters
+        ----------
+        source :    str | callable
+                    Either a directory or a zip file containing SWCs, or a
+                    function that accepts an ID and returns a
+                    `neuroglancer.Skeleton`.
+        name :      str, optional
+                    Name for the new layer. Must be unique.
+        **kwargs
+                    Additional properties for the layer.
+
+        """
+        name = find_name(name=name, scene=self, default='skeletons')
+
+        # The new layer
+        self.add_layers(LocalSkeletonLayer(source=source, name=name, **kwargs))
+
+    def add_local_meshes(self, source, name=None, **kwargs):
+        """Add a layer for a local mesh source.
+
+        Parameters
+        ----------
+        source :    str | callable
+                    Either a directory or a zip file containing meshes (anything
+                    that trimesh can read), or a function that accepts an ID and
+                    returns a `neuroglancer.Skeleton`.
+        name :      str, optional
+                    Name for the new layer. Must be unique.
+        **kwargs
+                    Additional properties for the layer.
+
+        """
+        name = find_name(name=name, scene=self, default='meshes')
+
+        # The new layer
+        self.add_layers(LocalSkeletonLayer(source=source, name=name, **kwargs))
 
     def drop_layer(self, which):
         """Remove layer from scene.
