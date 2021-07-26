@@ -39,6 +39,7 @@ class LocalFlywireMeshLayer(MeshLayer):
         global vol
         if not vol:
             vol = cv.CloudVolume('graphene://https://prodv1.flywire-daf.com/segmentation/table/fly_v31',
+                                 use_https=True,
                                  progress=False)
 
         # Setup server
