@@ -54,7 +54,7 @@ class LocalFlywireMeshLayer(MeshLayer):
         DEFAULTS = dict(name='flywire-meshes', type='segmentation')
         DEFAULTS.update(kwargs)
 
-        super().__init__(source='precomputed://http://127.0.0.1:5000/flywire',
+        super().__init__(source=f'precomputed://{self.server.url}/flywire',
                          **DEFAULTS)
 
 
