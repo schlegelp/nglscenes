@@ -15,6 +15,7 @@
 import flask
 import logging
 import threading
+import socket
 
 from werkzeug.serving import make_server
 from flask_cors import CORS
@@ -33,13 +34,20 @@ class Server:
     ----------
     ip :    str
             Local IP at which to serve the source.
-    port :  int
-            Port at which to serve.
+    port :  int | "auto"
+            Port at which to serve. If "auto" will auto-pick a free port.
 
     """
 
-    def __init__(self, ip='127.0.0.1', port=5000):
+    def __init__(self, ip='127.0.0.1', port='auto'):
         self.ip = ip
+
+        if port == 'auto':
+            # Generate a sock and let OS choose the port for us
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.bind(('localhost', 0))
+            port = sock.getsockname()[1]
+            sock.close()
         self.port = port
 
         # Initialize app
@@ -75,6 +83,11 @@ class Server:
         if self.thread:
             return True
         return False
+
+    @property
+    def url(self):
+        """Base URL for this server."""
+        return f'http://{self.ip}:{self.port}'
 
     def start(self):
         """Start server."""
@@ -158,7 +171,7 @@ class Server:
 
 
 class ServerThread(threading.Thread):
-    """A stopable thread for a flask app."""
+    """A stoppable thread for a flask app."""
     def __init__(self, app, ip='127.0.0.1', port=5000):
         threading.Thread.__init__(self, daemon=True)
         self.srv = make_server(ip, port, app)
