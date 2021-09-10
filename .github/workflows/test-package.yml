@@ -23,7 +23,7 @@ jobs:
       run: |
         pip install --upgrade pip
         pip install pytest numpy -U
-    - name: Install nblscenes
+    - name: Install nglscenes
       run: pip install -e .
     - name: Test
       run: pytest --verbose
