@@ -19,7 +19,7 @@
 
 from .local import LocalScene
 from .layers import ImageLayer, SegmentationLayer, AnnotationLayer
-from .flywire import LocalFlywireMeshLayer
+from .graphene import LocalFlywireMeshLayer, LocalFancMeshLayer
 
 
 class FAFBScene(LocalScene):
@@ -65,7 +65,7 @@ class FlyWireScene(LocalScene):
                                           name='fafb-neuropil',
                                           selectedAlpha=0,
                                           objectAlpha=0.05,
-                                          segmentColor={"1": '#ffffff'},
+                                          segmentColor={"1": "#ffffff"},
                                           segments=["1"]))
 
         # For some reason it won't work if try I initializing the scene with
@@ -77,4 +77,29 @@ class FlyWireScene(LocalScene):
                            "layout": "3d",
                            "showSlices": False,
                            "projectionScale": 365017})
+        self.push_state()
+
+
+class FancScene(LocalScene):
+    """NeuroGlancer scene containing FANC data (meshes, image data)."""
+    def __init__(self):
+        super().__init__()
+
+        # Add image layer
+        self.add_layers(ImageLayer(source='precomputed://gs://zetta_lee_fly_vnc_001_precomputed/fanc_v4_em',
+                                   name='FANC_v4 '))
+
+        # Add FlyWire mesh layer
+        self.add_layers(LocalFancMeshLayer(segments=['648518346478550356',
+                                                     '648518346476465526']))
+
+        # For some reason it won't work if try I initializing the scene with
+        # these settings
+        self.state.update({"position": [176052, 478389, 132651],
+                           "dimensions": {"x": [1e-9, "m"],
+                                          "y": [1e-9, "m"],
+                                          "z": [1e-9, "m"]},
+                           "layout": "3d",
+                           "showSlices": False,
+                           "projectionScale": 1095841})
         self.push_state()

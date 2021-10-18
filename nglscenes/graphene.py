@@ -16,13 +16,13 @@ import flask
 
 import cloudvolume as cv
 
+from functools import partial
+
 from .layers import MeshLayer
 from .utils import to_precomputed_mesh
 from .serve import server
 
-vol = None
-
-__all__ = ['LocalFlywireMeshLayer']
+__all__ = ['LocalFlywireMeshLayer', 'LocalFancMeshLayer']
 
 
 class LocalFlywireMeshLayer(MeshLayer):
@@ -36,17 +36,16 @@ class LocalFlywireMeshLayer(MeshLayer):
 
     def __init__(self, **kwargs):
         # Lazy initialization of volume
-        global vol
-        if not vol:
-            vol = cv.CloudVolume('graphene://https://prodv1.flywire-daf.com/segmentation/table/fly_v31',
-                                 use_https=True,
-                                 progress=False)
+        url = 'graphene://https://prodv1.flywire-daf.com/segmentation/table/fly_v31'
+        vol = cv.CloudVolume(url,
+                             use_https=True,
+                             progress=False)
 
         # Setup server
         self.server = server
         if 'flywire' not in self.server.sources:
             self.server.register_source(name='flywire',
-                                        data=flywire_data,
+                                        data=partial(fetch_data, vol=vol),
                                         manifest={'@type': 'neuroglancer_legacy_mesh',
                                                   'scales': [1, 1, 1]})
         self.server.start()
@@ -58,9 +57,45 @@ class LocalFlywireMeshLayer(MeshLayer):
                          **DEFAULTS)
 
 
-def flywire_data(id):
+class LocalFancMeshLayer(MeshLayer):
+    """A layer for FANC meshes.
+
+    This layer works like a bypass between the FANC mesh storage and the
+    precomputed format neuroglancer expects. It uses cloudvolume and requires
+    you to have your cave/chunked-graph secret set properly.
+
+    """
+
+    def __init__(self, **kwargs):
+        # Lazy initialization of volume
+        url = 'graphene://https://cave.fanc-fly.com/segmentation/table/mar2021_prod'
+        vol = cv.CloudVolume(url,
+                             use_https=True,
+                             progress=False)
+
+        # Setup server
+        self.server = server
+        if 'fanc' not in self.server.sources:
+            self.server.register_source(name='fanc',
+                                        data=partial(fetch_data, vol=vol),
+                                        manifest={'@type': 'neuroglancer_legacy_mesh',
+                                                  'scales': [1, 1, 1]})
+        self.server.start()
+
+        DEFAULTS = dict(name='fanc-meshes', type='segmentation')
+        DEFAULTS.update(kwargs)
+
+        super().__init__(source=f'precomputed://{self.server.url}/fanc',
+                         **DEFAULTS)
+
+
+def fetch_data(id, vol):
     """Fetch FlyWire meshes."""
     global cache
+
+    is_sharded = isinstance(vol.mesh,
+                            cv.datasource.graphene.mesh.GrapheneShardedMeshSource)
+
     # If has ':0' suffix we return the fragments
     if id.endswith(':0'):
         id = id.split(':')[0]
@@ -70,10 +105,21 @@ def flywire_data(id):
 
         # When we fetch the manifest, we will also directly fetch the fragments
         # in anticipation of the next request
-        frags = vol.mesh._get_mesh_fragments(mf['fragments'])
-        for fname, frag in frags:
-            mesh = cv.Mesh.from_draco(frag)
-            cache[fname.split('/')[1]] = to_precomputed_mesh(mesh.vertices, mesh.faces)
+        if not is_sharded:
+            frags = vol.mesh._get_mesh_fragments(mf['fragments'])
+
+            for fname, frag in frags:
+                mesh = cv.Mesh.from_draco(frag)
+                cache[fname.split('/')[1]] = to_precomputed_mesh(mesh.vertices, mesh.faces)
+        else:
+            # For sharded meshes the process of fetching fragments is so much
+            # more complicated that it's not worth trying to bypass fetching the
+            # manifest a second time
+            frags = vol.mesh.get_meshes_via_manifest_byte_offsets(id,
+                                                                  bounding_box=None)
+
+            for fname, mesh in zip(mf['fragments'], frags):
+                cache[fname] = to_precomputed_mesh(mesh.vertices, mesh.faces)
 
         return flask.jsonify(mf)
     # If actual segment ID, return this segment
@@ -82,9 +128,8 @@ def flywire_data(id):
         # the download as backup
         if id in cache:
             return cache.pop(id)
-        # Fetch the fragment (DracoEncode)
-        frag = vol.mesh._get_mesh_fragments([id])[0][1]
-        mesh = cv.Mesh.from_draco(frag)
+
+        mesh = vol.mesh.get(id)
 
         # Produce and return precomputed format
         return to_precomputed_mesh(mesh.vertices, mesh.faces)
