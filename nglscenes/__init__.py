@@ -15,6 +15,6 @@
 from .scenes import *
 from .layers import *
 from .local import *
-from .flywire import *
+from .graphene import *
 
 from . import examples
