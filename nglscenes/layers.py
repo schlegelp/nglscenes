@@ -129,6 +129,10 @@ class BaseLayer(ABC):
         """Return copy."""
         return copy.deepcopy(self)
 
+    def get(self, key, default=None):
+        """Return the value for key if key is in the scene, else default."""
+        return self.state.get(key, default=default)
+
     def link_viewer(self, viewer):
         """Link a neuroglancer viewer to this layer.
 
