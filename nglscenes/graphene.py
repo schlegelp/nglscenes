@@ -34,11 +34,12 @@ class LocalFlywireMeshLayer(MeshLayer):
 
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, parallel=5, **kwargs):
         # Lazy initialization of volume
         url = 'graphene://https://prodv1.flywire-daf.com/segmentation/table/fly_v31'
         vol = cv.CloudVolume(url,
                              use_https=True,
+                             parallel=parallel,
                              progress=False)
 
         # Setup server
@@ -66,11 +67,12 @@ class LocalFancMeshLayer(MeshLayer):
 
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, parallel=5, **kwargs):
         # Lazy initialization of volume
         url = 'graphene://https://cave.fanc-fly.com/segmentation/table/mar2021_prod'
         vol = cv.CloudVolume(url,
                              use_https=True,
+                             parallel=parallel,
                              progress=False)
 
         # Setup server
