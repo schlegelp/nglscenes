@@ -16,6 +16,7 @@ import copy
 import neuroglancer
 import logging
 import io
+import uuid
 
 import pandas as pd
 import numpy as np
@@ -32,7 +33,7 @@ from .utils import (add_on_change_callback, remove_callback,
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['LocalScene', 'LocalSkeletonLayer', 'LocalMeshLayer']
+__all__ = ['LocalScene', 'LocalSkeletonLayer', 'LocalMeshLayer', 'LocalAnnotationLayer']
 
 
 class LocalMeshLayer(BaseLayer):
@@ -126,6 +127,67 @@ class LocalSkeletonLayer(BaseLayer):
         self.viewer.set_state(state)
 
         logger.debug(f'State pushed from layer: {state}')
+
+
+class LocalAnnotationLayer(BaseLayer):
+    """Local annotation layer."""
+
+    DEFAULTS = OrderedDict({'source': {'url': 'local://annotations'},
+                            'type': 'annotation',
+                            'name': 'annotations'})
+    MUST_HAVE = ['name']
+
+    NG_LAYER = neuroglancer.AnnotationLayer
+
+    def __init__(self, units='nm', scales=[1, 1, 1], **kwargs):
+        self.dimensions = neuroglancer.CoordinateSpace(names=['x', 'y', 'z'],
+                                                       units=units,
+                                                       scales=scales)
+        props = copy.deepcopy(self.DEFAULTS)
+        props.update(**kwargs)
+        props['source']['transform'] = dict(outputDimensions=self.dimensions.to_json())
+        super().__init__(**props)
+
+    def __init_layer__(self):
+        return self.NG_LAYER(source=self['source'])
+
+    def __str__(self):
+        return f'<{self.type}(name={self.name}, annotations={len(self.get("annotations", []))})>'
+
+    def add_points(self, coords, ids=None):
+        """Add points.
+
+        Parameters
+        ----------
+        coords :    (N, 3) array
+        ids :       (N, ) array, optional
+
+        """
+        coords = np.asarray(coords)
+
+        if not coords.ndim == 2 or coords.shape[1] != 3:
+            raise ValueError(f'`coords` must be (N, 3) array, got {coords.shape}')
+
+        if isinstance(ids, type(None)):
+            ids = [str(uuid.uuid4()) for c in coords]
+
+        if len(ids) != len(coords):
+            raise ValueError(f'Got {len(ids)} ids for {len(coords)} coords')
+
+        new_an = []
+        for i, co in zip(ids, coords):
+            an = {"point": co.tolist(),
+                  "type": "point",
+                  "id": i}
+            new_an.append(an)
+
+        if 'annotations' not in self:
+            self['annotations'] = []
+        self['annotations'] += new_an
+
+    def clear(self):
+        """Clear all annotations."""
+        self['annotations'] = []
 
 
 class CatmaidSkeletonLayer(LocalSkeletonLayer):
