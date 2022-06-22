@@ -247,3 +247,17 @@ def find_name(name, scene, default):
         i += 1
 
     return name
+
+
+def is_mesh(x):
+    """Test if object is mesh-like."""
+    if hasattr(x, 'vertices') and hasattr(x, 'faces'):
+        return True
+    return False
+
+
+def is_iterable(x):
+    """Check if object is iterable but not string."""
+    if hasattr(x, '__contains__') and not isinstance(x, str):
+        return True
+    return False
