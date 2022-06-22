@@ -34,19 +34,20 @@ class LocalFlywireMeshLayer(MeshLayer):
 
     """
 
-    def __init__(self, parallel=5, **kwargs):
+    def __init__(self, parallel=5, cache=False, **kwargs):
         # Lazy initialization of volume
         url = 'graphene://https://prodv1.flywire-daf.com/segmentation/table/fly_v31'
-        vol = cv.CloudVolume(url,
-                             use_https=True,
-                             parallel=parallel,
-                             progress=False)
+        self.vol = cv.CloudVolume(url,
+                                  use_https=True,
+                                  parallel=parallel,
+                                  cache=cache,
+                                  progress=False)
 
         # Setup server
         self.server = server
         if 'flywire' not in self.server.sources:
             self.server.register_source(name='flywire',
-                                        data=partial(fetch_data, vol=vol),
+                                        data=partial(fetch_data, vol=self.vol),
                                         manifest={'@type': 'neuroglancer_legacy_mesh',
                                                   'scales': [1, 1, 1]})
         self.server.start()
@@ -67,12 +68,13 @@ class LocalFancMeshLayer(MeshLayer):
 
     """
 
-    def __init__(self, parallel=5, **kwargs):
+    def __init__(self, parallel=5, cache=False, **kwargs):
         # Lazy initialization of volume
         url = 'graphene://https://cave.fanc-fly.com/segmentation/table/mar2021_prod'
         vol = cv.CloudVolume(url,
                              use_https=True,
                              parallel=parallel,
+                             cache=cache,
                              progress=False)
 
         # Setup server
