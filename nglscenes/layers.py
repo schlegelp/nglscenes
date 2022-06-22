@@ -45,6 +45,9 @@ class BaseLayer(ABC):
         self.state = kwargs
         self.validate_properties()
 
+    def __init_layer__(self):
+        return self.NG_LAYER(source=self['source'])
+
     @property
     def name(self):
         # This is the unique identifier for this layer
@@ -145,7 +148,7 @@ class BaseLayer(ABC):
         with viewer.txn() as s:
             if self.name in s.layers:
                 raise ValueError(f'Viewer already has a layer name "{self.name}"')
-            s.layers[self.name] = self.NG_LAYER(source=self['source'])
+            s.layers[self.name] = self.__init_layer__()
 
         # Set viewer AFTER adding the layer
         self._viewer = viewer
