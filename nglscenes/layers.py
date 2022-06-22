@@ -108,21 +108,28 @@ class BaseLayer(ABC):
             self.__dict__[k] = v
 
     def __setitem__(self, name, value):
-        """Set a scene attribute."""
+        """Set a layer attribute."""
         self._state[name] = value
         self._stale = True
 
     def __getitem__(self, name):
-        """Get a scene property."""
+        """Get a layer property."""
         if name in self.state:
             return self.state[name]
         raise AttributeError(f'"{name}" not in state.')
+
+    def __contains__(self, name):
+        """Check if layer property exists."""
+        if name in self.state:
+            return True
+        return False
 
     def __or__(self, other):
         if type(other) != type(self):
             raise NotImplementedError(f'Unable to combine {type(other)} with '
                                       f'{self.type}')
         raise NotImplementedError(f'Combination not implemented for {self.type}')
+
 
     def as_dict(self):
         """Return dictionary describing this layer."""
