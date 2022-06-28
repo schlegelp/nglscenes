@@ -33,7 +33,8 @@ from .utils import (add_on_change_callback, remove_callback,
 
 logger = logging.getLogger(__name__)
 
-__all__ = ['LocalScene', 'LocalSkeletonLayer', 'LocalMeshLayer', 'LocalAnnotationLayer']
+__all__ = ['LocalScene', 'LocalSkeletonLayer', 'LocalMeshLayer',
+           'LocalAnnotationLayer', 'BundleUpdates']
 
 
 class LocalMeshLayer(BaseLayer):
@@ -108,6 +109,10 @@ class LocalSkeletonLayer(BaseLayer):
 
     def push_state(self, on_error='raise'):
         """Push state to neuroglancer viewer."""
+        if self._lock:
+            logger.debug('Pushing state aborted: Layer locked')
+            return
+
         if not self.viewer:
             raise ValueError('Layer is not linked to a neuroglancer viewer.')
 
@@ -486,8 +491,12 @@ class LocalScene(Scene):
 
         return layer
 
-    def push_state(self, exclude_layers=True, on_error='raise'):
+    def push_state(self, exclude_layers=True, ignore_lock=False, on_error='raise'):
         """Push state to neuroglancer viewer."""
+        if self._lock and not ignore_lock:
+            logger.debug('Pushing state aborted: Scene locked')
+            return
+
         with self.viewer.txn() as s:
             state = s.to_json()
 
@@ -504,6 +513,10 @@ class LocalScene(Scene):
 
     def pull_state(self, exclude_layers=True, on_error='raise'):
         """Pull state from neuroglancer viewer."""
+        if self._lock:
+            logger.debug('Pulling state aborted: Scene locked')
+            return
+
         with self.viewer.txn() as s:
             state = s.to_json()
 
@@ -515,7 +528,7 @@ class LocalScene(Scene):
         logger.debug(f'State pulled to scene {self}: {state}')
 
 
-class BundleUpdate:
+class BundleUpdates:
     """Context manager that prevents update of a given scene.
 
     Can be useful if you are changing many values at a time and want to wait
@@ -527,12 +540,15 @@ class BundleUpdate:
         self.scene = scene
 
     def __enter__(self):
+        self.scene.pull_state()
         self.scene._lock = True
         for l in self.scene.layers:
+            l.pull_state()
             l._lock = True
 
-    def __exit__(self):
+    def __exit__(self, type, value, traceback):
+        self.scene.push_state(exclude_layers=False, ignore_lock=True)
+
         self.scene._lock = False
         for l in self.scene.layers:
             l._lock = False
-        self.scene.push_state()

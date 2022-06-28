@@ -43,6 +43,7 @@ class BaseLayer(ABC):
     def __init__(self, **kwargs):
         self._viewer = None
         self.state = kwargs
+        self._lock = False
         self.validate_properties()
 
     def __init_layer__(self):
@@ -168,6 +169,10 @@ class BaseLayer(ABC):
 
     def push_state(self, on_error='raise'):
         """Push state to neuroglancer viewer."""
+        if self._lock:
+            logger.debug('Pushing state aborted: Layer locked')
+            return
+
         if not self.viewer:
             raise ValueError('Layer is not linked to a neuroglancer viewer.')
 
@@ -189,6 +194,10 @@ class BaseLayer(ABC):
 
     def pull_state(self, on_error='raise'):
         """Pull state from neuroglancer viewer."""
+        if self._lock:
+            logger.debug('Pulling state aborted: Layer locked')
+            return
+
         if not self.viewer:
             raise ValueError('Layer is not linked to a neuroglancer viewer.')
 
