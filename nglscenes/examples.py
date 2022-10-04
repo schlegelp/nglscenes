@@ -19,7 +19,7 @@
 
 from .local import LocalScene
 from .layers import ImageLayer, SegmentationLayer, AnnotationLayer
-from .graphene import LocalFlywireMeshLayer, LocalFancMeshLayer
+from .graphene import FlyWireSegmentationLayer, LocalFancMeshLayer
 
 
 class FAFBScene(LocalScene):
@@ -54,11 +54,11 @@ class FlyWireScene(LocalScene):
         super().__init__()
 
         # Add image layer
-        self.add_layers(ImageLayer(source='precomputed://gs://neuroglancer-fafb-data/fafb_v14/fafb_v14_clahe',
-                                   name='fafb_v14_clahe'))
+        self.add_layers(ImageLayer(source='precomputed://https://bossdb-open-data.s3.amazonaws.com/flywire/fafbv14',
+                                   name='fafb_v14'))
 
         # Add FlyWire mesh layer
-        self.add_layers(LocalFlywireMeshLayer(segments=["720575940621039145"]))
+        self.add_layers(FlyWireSegmentationLayer(segments=["720575940621039145"]))
 
         # Add FAFB mesh
         self.add_layers(SegmentationLayer(source="precomputed://https://spine.janelia.org/files/eric/jfrc_mesh_test",

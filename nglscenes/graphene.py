@@ -17,46 +17,56 @@ import flask
 import cloudvolume as cv
 
 from functools import partial
+from neuroglancer import credentials_provider
+from neuroglancer.futures import run_on_new_thread
+from neuroglancer.default_credentials_manager import default_credentials_manager
 
-from .layers import MeshLayer
+from .layers import MeshLayer, SegmentationLayer
 from .utils import to_precomputed_mesh
 from .serve import server
 
-__all__ = ['LocalFlywireMeshLayer', 'LocalFancMeshLayer']
+__all__ = ['FlyWireSegmentationLayer', 'LocalFancMeshLayer']
+
+_global_flywire_credentials_provider = None
 
 
-class LocalFlywireMeshLayer(MeshLayer):
-    """A layer for FlyWire meshes.
+class FlyWireCredentialsProvider(credentials_provider.CredentialsProvider):
+    domain = 'prod.flywire-daf.com'
+    def __init__(self):
+        super(FlyWireCredentialsProvider, self).__init__()
 
-    This layer works like a bypass between the FlyWire mesh storage and the
-    precomputed format neuroglancer expects. It uses cloudvolume and requires
-    you to have your cave/chunked-graph secret set properly.
+        self._credentials = {}
+        self._credentials['token'] = cv.secrets.cave_credentials(self.domain).get('token', None)
 
-    """
+        if not self._credentials['token']:
+            raise ValueError(f'No cave credentials for domain {self.domain} '
+                             'found. See cloud-volume for details on how to set it.')
 
-    def __init__(self, parallel=5, cache=False, **kwargs):
-        # Lazy initialization of volume
-        url = 'graphene://https://prodv1.flywire-daf.com/segmentation/table/fly_v31'
-        self.vol = cv.CloudVolume(url,
-                                  use_https=True,
-                                  parallel=parallel,
-                                  cache=cache,
-                                  progress=False)
+    def get_new(self):
+        def func():
+            return dict(tokenType=u'Bearer', accessToken=self._credentials['token'])
 
-        # Setup server
-        self.server = server
-        if 'flywire' not in self.server.sources:
-            self.server.register_source(name='flywire',
-                                        data=partial(fetch_data, vol=self.vol),
-                                        manifest={'@type': 'neuroglancer_legacy_mesh',
-                                                  'scales': [1, 1, 1]})
-        self.server.start()
+        return run_on_new_thread(func)
 
-        DEFAULTS = dict(name='flywire-meshes', type='segmentation')
-        DEFAULTS.update(kwargs)
 
-        super().__init__(source=f'precomputed://{self.server.url}/flywire',
-                         **DEFAULTS)
+def get_flywire_credentials_provider():
+    """Copy pasted from neuroglancer."""
+    global _global_flywire_credentials_provider
+    if _global_flywire_credentials_provider is None:
+        _global_flywire_credentials_provider = FlyWireCredentialsProvider()
+    return _global_flywire_credentials_provider
+
+
+# Register authentication
+default_credentials_manager.register(
+     u'middleauthapp',
+     lambda _parameters: get_flywire_credentials_provider())
+
+
+class FlyWireSegmentationLayer(SegmentationLayer):
+    def __init__(self, name='flywire_production', **kwargs):
+        kwargs['source'] = 'graphene://middleauth+https://prod.flywire-daf.com/segmentation/1.0/fly_v31'
+        super().__init__(name=name, **kwargs)
 
 
 class LocalFancMeshLayer(MeshLayer):
@@ -131,7 +141,7 @@ def fetch_data(id, vol):
         # We really should have this cached but just in case will keep
         # the download as backup
         if id in cache:
-            return cache.pop(id)
+            return cache[id]
 
         mesh = vol.mesh.get(id)
 
