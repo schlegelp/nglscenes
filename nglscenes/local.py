@@ -220,12 +220,6 @@ class LocalMeshSource(neuroglancer.LocalVolume):
         self.source = source
 
     def get_object_mesh(self, object_id):
-        vertices = np.array([[0, 0, 0],
-                             [1, 1, 1],
-                             [0, 1, 0]])
-        faces = np.array([[0, 1, 2]])
-        return to_precomputed_mesh(vertices, faces)
-
         """Read mesh for given object and return in precomputed format."""
         if callable(self.source):
             return self.source(object_id)
