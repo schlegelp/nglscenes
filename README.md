@@ -8,7 +8,7 @@ This is very much WIP and implementation details might change at any point!
 ## Install
 
 ```bash
-$ pip3 install git+git://github.com/schlegelp/nglscenes@main
+$ pip3 install git+https://github.com/schlegelp/nglscenes@main
 ```
 
 ## Usage
