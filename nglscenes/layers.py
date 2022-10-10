@@ -292,7 +292,7 @@ class SegmentationLayer(BaseLayer):
         if isinstance(source, dict):
             source = source.get('url', source)
 
-        return f'<{self.type}(name={self.name}, source={source}, selected segments={len(self["segments"])})>'
+        return f'<{self.type}(name={self.name}, source={source}, selected segments={len(self.get("segments", []))})>'
 
 
 class AnnotationLayer(BaseLayer):
