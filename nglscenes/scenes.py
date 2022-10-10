@@ -20,8 +20,9 @@ import inspect
 
 from urllib.parse import quote, urldefrag
 
-from . layers import (ImageLayer, SegmentationLayer, AnnotationLayer,
+from .layers import (ImageLayer, SegmentationLayer, AnnotationLayer,
                       MeshLayer, BaseLayer, LayerManager)
+from .graphene import GrapheneSegmentationLayer
 from . import utils
 
 
@@ -196,7 +197,7 @@ class Scene:
         else:
             x = cls()
 
-        layers = parse_layers(state.pop('layers'))
+        layers = parse_layers(state.pop('layers', []))
 
         # Update properties
         x._state.update(state)
@@ -309,11 +310,13 @@ LAYER_FACTORY = {
     'segmentation': SegmentationLayer,
     'mesh': MeshLayer,
     'image': ImageLayer,
-    'annotation': AnnotationLayer
+    'annotation': AnnotationLayer,
+    'segmentation_with_graph': GrapheneSegmentationLayer
+
 }
 
 
-def parse_layers(layer, skip_unknown=False):
+def parse_layers(layer, skip_unknown=False, skip_archived=True):
     if isinstance(layer, list):
         res = [parse_layers(l) for l in layer]
         # Drop "None" if skip_unknown=True
@@ -322,10 +325,14 @@ def parse_layers(layer, skip_unknown=False):
     if not isinstance(layer, dict):
         raise TypeError(f'Expected dicts or list thereof, got "{type(layer)}"')
 
+    # Layers can be archived which I think means they have been deleted?
+    if layer.get('archived', False) and skip_archived:
+        return
+
     ty = layer.get('type', 'NA')
     if ty not in LAYER_FACTORY:
         if skip_unknown:
             return
-        raise ValueError(f'Unable to parse layer of type {ty}')
+        raise ValueError(f'Unable to parse layer "{layer.get("name", "")}" of type "{ty}"')
 
     return LAYER_FACTORY[ty](**layer)
