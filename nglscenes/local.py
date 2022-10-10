@@ -26,10 +26,10 @@ from collections import OrderedDict
 from pathlib import Path
 from zipfile import ZipFile
 
-from .scenes import Scene
+from .scenes import Scene, parse_layers
 from .layers import BaseLayer
 from .utils import (add_on_change_callback, remove_callback,
-                    to_precomputed_mesh, find_name)
+                    to_precomputed_mesh, find_name, parse_json_scene)
 
 logger = logging.getLogger(__name__)
 
@@ -360,9 +360,19 @@ class LocalSkeletonSource(neuroglancer.skeleton.SkeletonSource):
 
 
 class LocalScene(Scene):
-    """A scene served via and synced to a local neuroglancer server."""
+    """A scene served via and synced to a local neuroglancer server.
 
-    def __init__(self, **kwargs):
+    Parameters
+    ----------
+    auto_sync :     bool
+                    If True, will automatically push changes of the state to
+                    the viewer. If False, you'll need to call `.push_state()`
+                    for changes to make it to the viewer.
+
+    """
+
+    def __init__(self, auto_sync=True, **kwargs):
+        self._auto_sync = auto_sync  # This needs to be set before super()
         super().__init__(**kwargs)
         del self._url
         self._viewer = None
@@ -403,8 +413,34 @@ class LocalScene(Scene):
 
         if not isinstance(value, dict):
             raise TypeError('State must be a dictionary')
-        value = add_on_change_callback(value, callback=set_stale_and_push)
+
+        if self._auto_sync:
+            value = add_on_change_callback(value, callback=set_stale_and_push)
+
         self._state = value
+
+    @classmethod
+    def from_url(cls, url):
+        """Generate a local scene from a remote neuroglancer URL.
+
+        Parameters
+        ----------
+        url :       str
+
+        """
+        state = parse_json_scene(url)
+        layers = parse_layers(state.pop('layers', []))
+
+        # Update properties
+        scene = cls(**state)
+
+        if layers:
+            scene.add_layers(*layers)
+
+        scene.push_state()
+
+        return scene
+
 
     def add_layers(self, *layers):
         """Add layer to scene.
