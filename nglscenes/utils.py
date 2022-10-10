@@ -14,10 +14,14 @@
 """Collection of utility functions."""
 
 import functools
+import neuroglancer
 import requests
+import struct
 import json
+import io
 
 import numpy as np
+import pandas as pd
 
 from urllib.parse import urlparse, urlencode, unquote
 
@@ -154,7 +158,7 @@ def remove_callback(x, recursive=True):
     elif isinstance(x, list):
         if recursive:
             x = [remove_callback(v, True) for v in x]
-        if not isinstance(x, CallBackList):
+        if isinstance(x, CallBackList):
             x = list(x)
     return x
 
@@ -165,9 +169,56 @@ def parse_json_scene(scene):
         raise ValueError(f'Expected str, got "{type(scene)}"')
 
     if is_url(scene):
-        scene = unquote(urlparse(scene).fragment)[1:]
+        if is_state_url(scene):
+            scene = parse_state_url(scene)
+        else:
+            scene = unquote(urlparse(scene).fragment)[1:]
+            scene = json.loads(scene)
 
-    return json.loads(scene)
+    return scene
+
+
+def parse_state_url(x):
+    """Fetch scene from a state server."""
+    parsed = urlparse(x)
+    url = parsed.query.replace('json_url=', '')
+
+    # FlyWire needs authentication
+    if urlparse(url).netloc == 'globalv1.flywire-daf.com':
+
+        # Fetch state
+        token = get_cave_credentials()
+        headers = {'Authorization': f"Bearer {token}"}
+    else:
+        headers = {}
+
+    r = requests.get(url, headers=headers)
+    r.raise_for_status()
+
+    return r.json()
+
+
+def get_cave_credentials(domain='prod.flywire-daf.com'):
+    """Get CAVE credentials.
+
+    Parameters
+    ----------
+    domain :    str
+                Domain to get the secret for. Only relevant for
+                ``cloudvolume>=3.11.0``.
+
+    Returns
+    -------
+    token :     str
+
+    """
+    # Lazy import
+    import cloudvolume as cv
+
+    token = cv.secrets.cave_credentials(domain).get('token', None)
+    if not token:
+        raise ValueError(f'No chunkedgraph secret for domain {domain} found')
+    return token
 
 
 def is_url(x):
@@ -177,6 +228,14 @@ def is_url(x):
         return all([result.scheme, result.netloc, result.path])
     except BaseException:
         return False
+
+def is_state_url(x):
+    """Check if URL points to a state server."""
+    if not is_url(x):
+        return False
+    if 'json_url=http' in x:
+        return True
+    return False
 
 
 def make_url(*args, **GET):
@@ -264,6 +323,63 @@ def is_mesh(x):
     if hasattr(x, 'vertices') and hasattr(x, 'faces'):
         return True
     return False
+
+
+def is_skeleton(x):
+    """Test if object is skeleton-like."""
+    if hasattr(x, 'vertices') and hasattr(x, 'edges'):
+        return True
+    elif hasattr(x, 'nodes'):
+        return True
+    elif 'Dotprops' in str(type(x)):
+        return True
+    return False
+
+
+def to_ng_skeleton(x):
+    """Convert object to neuroglancer Skeleton.
+
+    Parameters
+    ----------
+    x :     pd.DataFrame | navis.TreeNeuron | cloudvolume.Skeleton | navis.Dotprops
+
+    Returns
+    -------
+    neuroglancer.Skeleton
+
+    """
+    if 'Dotprops' in str(type(x)):
+        x = x.to_skeleton()
+
+    if 'TreeNeuron' in str(type(x)):
+        # Extract node table and make SWC-compliant
+        x = x.nodes[['node_id', 'parent_id', 'x', 'y', 'z']].copy()
+        x.columns = ['PointNo', 'Parent', 'X', 'Y', 'Z']
+
+        node_ids = dict(zip(x.PointNo.values, range(0, len(x))))
+        node_ids[-1] = -1
+        x['PointNo'] = x.PointNo.map(node_ids)
+        x['Parent'] = x.Parent.map(node_ids)
+
+    if isinstance(x, pd.DataFrame):
+        # Make sure points are in ascending order (should really already)
+        x.sort_values('PointNo', inplace=True)
+
+        # In case node IDs start at 1
+        x['Parent'] -= x['PointNo'].min()
+        x['PointNo'] -= x['PointNo'].min()
+
+        vertices = x[['X', 'Y', 'Z']].values
+        edges = x.loc[x.Parent >= 0, ['Parent', 'PointNo']].values
+    elif hasattr(x, 'vertices') and hasattr(x, 'edges'):
+        vertices, edges = x.vertices, x.edges
+    else:
+        raise TypeError(f'Unable to convert object of type "{type(x)}" to '
+                        'neuroglancer skeleton.')
+
+    return neuroglancer.skeleton.Skeleton(
+                            vertex_positions=vertices,
+                            edges=edges)
 
 
 def is_iterable(x):
