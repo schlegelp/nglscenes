@@ -19,7 +19,9 @@
 
 from .local import LocalScene
 from .layers import ImageLayer, SegmentationLayer, AnnotationLayer
-from .graphene import FlyWireSegmentationLayer, LocalFancMeshLayer
+from .graphene import FlyWireSegmentationLayer, FancSegmentationLayer
+
+__all__ = ['FAFBScene', 'FancScene', 'FlyWireScene']
 
 
 class FAFBScene(LocalScene):
@@ -81,7 +83,7 @@ class FlyWireScene(LocalScene):
 
 
 class FancScene(LocalScene):
-    """NeuroGlancer scene containing FANC data (meshes, image data)."""
+    """NeuroGlancer scene containing FANC data."""
     def __init__(self):
         super().__init__()
 
@@ -89,9 +91,9 @@ class FancScene(LocalScene):
         self.add_layers(ImageLayer(source='precomputed://gs://zetta_lee_fly_vnc_001_precomputed/fanc_v4_em',
                                    name='FANC_v4 '))
 
-        # Add FlyWire mesh layer
-        self.add_layers(LocalFancMeshLayer(segments=['648518346478550356',
-                                                     '648518346476465526']))
+        # Add FANC layer
+        self.add_layers(FancSegmentationLayer(segments=['648518346478550356',
+                                                        '648518346476465526']))
 
         # For some reason it won't work if try I initializing the scene with
         # these settings
