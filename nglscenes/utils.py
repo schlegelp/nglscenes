@@ -236,6 +236,16 @@ def to_precomputed_mesh(vertices, faces):
     return b''.join([array.tobytes('C') for array in vertex_index_format])
 
 
+def to_precomputed_skeleton(vertices, edges, radius=None):
+    """Write skeleton to neuroglancers binary format."""
+    vertices = np.asarray(vertices, dtype='float32', order='C')
+    edges = np.asarray(edges, dtype='uint32', order='C')
+    vertex_index_format = [np.uint32(vertices.shape[0]),
+                           np.uint32(edges.shape[0]),
+                           vertices, edges]
+    return b''.join([array.tobytes('C') for array in vertex_index_format])
+
+
 def find_name(name, scene, default):
     """Find a name that's not already in the scene."""
     if not name:
