@@ -65,6 +65,7 @@ class Scene:
 
     @state.setter
     def state(self, value):
+        self._stale = True
         def set_stale():
             self._stale = True
 
