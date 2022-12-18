@@ -43,7 +43,7 @@ Manually construct a simple scene
 >>> # Add layers to scene
 >>> scene.add_layers(img, seg, an)
 >>> scene
-<NeuroGlancerScene(1 segmentation, 0 mesh, 1 image, 1 annotation)>
+<Scene(1 segmentation, 0 mesh, 1 image, 1 annotation)>
 
 https://neuroglancer-demo.appspot.com/#!%7B%22laye[...]
 
@@ -60,9 +60,9 @@ Manipulate a scene
 ```python
 >>> from nglscenes import *
 >>> # Read scene from URL or JSON-formatted string
->>> scene = NeuroglancerScene.from_clipboard()
+>>> scene = Scene.from_clipboard()
 >>> scene
-<NeuroGlancerScene(3 segmentation, 1 mesh, 3 image, 1 annotation)>
+<Scene(3 segmentation, 1 mesh, 3 image, 1 annotation)>
 
 https://fafb-dot-neuroglancer-demo.appspot.com/#!%7[...]
 
@@ -83,8 +83,8 @@ Combine two scenes
 
 ```python
 >>> # Read two scenes
->>> scene1 = NeuroglancerScene.from_clipboard()
->>> scene2 = NeuroglancerScene.from_clipboard()
+>>> scene1 = Scene.from_clipboard()
+>>> scene2 = Scene.from_clipboard()
 
 >>> # Use addition to simply combine the layers of both scenes
 >>> comb = scene1 + scene2
