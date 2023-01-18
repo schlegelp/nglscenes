@@ -168,15 +168,35 @@ class Scene:
         layer_str = []
         for lt, ty in LAYER_FACTORY.items():
             this = [l for l in self.layers if isinstance(l, ty)]
-            layer_str.append(f'{len(this)} {lt}')
-        return f'<{self.type}({", ".join(layer_str)})>\n\n{self.url}'
+            if this:
+                layer_str.append(f'{len(this)} {lt}')
+        if not layer_str:
+            layer_str = 'no'
+        url = self.url
+        if len(url) >= 60:
+            url = url[:30] + '[...]' + url[-30:]
+        return f'<{self.type}({", ".join(layer_str)} layers)>\n\n{url}'
 
     def __repr__(self):
         return self.__str__()
 
+    def _repr_html_(self):
+        layer_str = []
+        for lt, ty in LAYER_FACTORY.items():
+            this = [l for l in self.layers if isinstance(l, ty)]
+            if this:
+                layer_str.append(f'{len(this)} {lt}')
+        if not layer_str:
+            layer_str = 'no'
+        url = self.url
+        if len(url) >= 60:
+            url = url[:30] + ' [...] ' + url[-30:]
+        return f'''&lt;{self.type}({", ".join(layer_str)} layers)&gt;<br>
+                <a href="{self.url}" target="_blank">{url}</a>'''
+
     @classmethod
     def from_clipboard(cls):
-        """Generate scene from either a JSON or URL."""
+        """Generate scene from either a JSON or URL on the clipboard."""
         # Read clipboard
         scene = pyperclip.paste()
 
