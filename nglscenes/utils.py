@@ -336,6 +336,43 @@ def is_skeleton(x):
     return False
 
 
+def parse_objects(x, raise_unknown=True):
+    """Sort objects into skeleton, meshes and annotations.
+
+    Parameters
+    ----------
+    x
+                    Objects to sort.
+    raise_unknown : bool
+                    If True, an unknown object type will raise an exception.
+
+    Returns
+    -------
+    meshes :        list
+    skeletons :     list
+    annotations :   list
+
+    """
+    if not is_iterable(x):
+        x = [x]
+
+    skeletons = []
+    meshes = []
+    annotations = []
+
+    for o in x:
+        if is_mesh(o):
+            meshes.append(o)
+        elif is_skeleton(o):
+            skeletons.append(o)
+        elif isinstance(o, np.ndarray) and (o.ndim == 2) and (o.shape[1] == 3):
+            annotations.append(o)
+        elif raise_unknown:
+            raise TypeError(f'Unknown object type {type(o)}')
+
+    return meshes, skeletons, annotations
+
+
 def to_ng_skeleton(x):
     """Convert object to neuroglancer Skeleton.
 
