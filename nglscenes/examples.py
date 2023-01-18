@@ -63,7 +63,7 @@ class FlyWireScene(LocalScene):
         self.add_layers(FlyWireSegmentationLayer(segments=["720575940621039145"]))
 
         # Add FAFB mesh
-        self.add_layers(SegmentationLayer(source="precomputed://https://spine.janelia.org/files/eric/jfrc_mesh_test",
+        self.add_layers(SegmentationLayer(source="precomputed://gs://flywire_neuropil_meshes/whole_neuropil/brain_mesh_v141.surf",
                                           name='fafb-neuropil',
                                           selectedAlpha=0,
                                           objectAlpha=0.05,
