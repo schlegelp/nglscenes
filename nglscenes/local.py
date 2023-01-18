@@ -441,7 +441,6 @@ class LocalScene(Scene):
 
         return scene
 
-
     def add_layers(self, *layers):
         """Add layer to scene.
 
@@ -500,6 +499,28 @@ class LocalScene(Scene):
         # The new layer
         self.add_layers(LocalSkeletonLayer(source=source, name=name, **kwargs))
 
+    def keybind_function(self, func, name, key):
+        """Bind function to key.
+
+        Parameters
+        ----------
+        func :      callable
+                    The function to be called. Must accept the viewer state
+                    as the only argument.
+        name :      str
+                    Name under which the function should be registered.
+        key :       str
+                    The key to which the function should be bound.
+
+        """
+        assert callable(func)
+        assert isinstance(name, str)
+        assert isinstance(key, str)
+
+        self.viewer.actions.add(name, func)
+        with self.viewer.config_state.txn() as s:
+            s.input_event_bindings.viewer[f'key{key}'] = name
+
     def drop_layer(self, which):
         """Remove layer from scene.
 
@@ -557,9 +578,119 @@ class LocalScene(Scene):
 
         logger.debug(f'State pulled to scene {self}: {state}')
 
+    def set_status_message(self, msg):
+        """Set status message in bottom bar.
+
+        Parameters
+        ----------
+        msg :       str | None
+                    String to set the the status message. Use `None` to clear.
+
+        """
+        assert isinstance(msg, (str, type(None)))
+        with self.viewer.config_state.txn() as s:
+            if msg is not None:
+                # We can set multiple status messages by using different keys
+                # But for this method we'll just always use "status" which
+                # means there can only ever be one
+                s.status_messages['status'] = msg
+            else:
+                s.status_messages.clear()
+
+    def screen_segments(self, segments, layer, N=1):
+        """Start screening segments.
+
+        Use `q` and `w` keys to cycle through segments.
+        Use `d` key to tag the currently selected segment. Tagged segments can
+        be found in `SegmentCycler.tagged` (see return value).
+
+        Parameters
+        ----------
+        segments :  list of str
+                    Segment IDs to screen.
+        layer :     int | str
+                    Index or layer of target layer.
+        N :         int
+                    The number of segments to show at a time.
+
+        Returns
+        -------
+        cycler :    SegmentCycler
+                    The object holding the segments, the current index and
+                    the tagged segments.
+
+        """
+        assert isinstance(segments, (list, np.ndarray))
+        assert isinstance(layer, (int, str))
+        assert isinstance(N, int)
+        assert N > 0
+        assert len(segments)
+
+        segments = sorted(np.asarray(segments).astype(str))
+
+        cycler = SegmentCycler(segments, layer, self, N=N)
+
+        self.keybind_function(cycler.next, 'next', 'w')
+        self.keybind_function(cycler.previous, 'previous', 'q')
+        self.keybind_function(cycler.tag, 'tag', 'd')
+
+        with BundleUpdates(self):
+            self.layers[layer]['segmentQuery'] = ','.join(segments)
+            self.layers[layer]['segments'] = list(segments[0:N])
+
+        return cycler
+
+
+class SegmentCycler:
+    """Helper class for cycling through selected segments."""
+    def __init__(self, segments, layer, scene, N=1):
+        self.segments = list(set(list(segments)))
+        self.layer = layer
+        self.scene = scene
+        self.N = N
+        self.ix = 0
+        self.tagged = []
+
+    def __str__(self):
+        return f"{type(self)}(segments={len(self)}, current index={self.ix}, tagged={len(self.tagged)})"
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __len__(self):
+        return len(self.segments)
+
+    @property
+    def _ix_str(self):
+        if self.N == 1:
+            return str(self.ix + 1)
+        else:
+            return f'{self.ix + 1}-{self.ix + 1 + self.N}'
+
+    def next(self, _):
+        self.ix += self.N
+        if self.ix > (len(self.segments) - self.N):
+            self.ix = 0
+
+        self.scene.layers[self.layer]['segments'] = self.segments[self.ix:self.ix + self.N]
+        self.scene.set_status_message(f'Screening ({self._ix_str} of {len(self.segments)})')
+
+    def previous(self, _):
+        self.ix -= self.N
+        if self.ix < 0:
+            self.ix = len(self.segments)
+
+        self.scene.layers[self.layer]['segments'] = self.segments[self.ix:self.ix + self.N]
+        self.scene.set_status_message(f'Screening ({self._ix_str} of {len(self.segments)})')
+
+    def tag(self, _):
+        seg = self.scene.layers[self.layer]['segments']
+        self.tagged += seg
+        self.scene.set_status_message(f'Tagged segment(s) "{seg}"')
+
 
 class BundleUpdates:
-    """Context manager that prevents update of a given scene.
+    """Context manager delays pushing states until after exit.
 
     Can be useful if you are changing many values at a time and want to wait
     till you are done for pushing the changes to neuroglancer.
