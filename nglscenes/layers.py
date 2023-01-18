@@ -111,7 +111,6 @@ class BaseLayer(ABC):
     def __setitem__(self, name, value):
         """Set a layer attribute."""
         self._state[name] = value
-        self._stale = True
 
     def __getitem__(self, name):
         """Get a layer property."""

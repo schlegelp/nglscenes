@@ -81,8 +81,7 @@ class Scene:
     @property
     def url(self):
         """Url to self."""
-        if self._stale:
-            self._url = self.make_url()
+        self._url = self.make_url()
         return self._url
 
     def __add__(self, other):
