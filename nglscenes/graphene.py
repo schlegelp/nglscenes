@@ -16,14 +16,11 @@ import flask
 
 import cloudvolume as cv
 
-from functools import partial
 from neuroglancer import credentials_provider
 from neuroglancer.futures import run_on_new_thread
 from neuroglancer.default_credentials_manager import default_credentials_manager
 
-from .layers import MeshLayer, SegmentationLayer
-from .utils import to_precomputed_mesh
-from .serve import server
+from .layers import SegmentationLayer
 
 __all__ = ['FlyWireSegmentationLayer', 'FancSegmentationLayer']
 
