@@ -12,8 +12,6 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 
-import flask
-
 import cloudvolume as cv
 
 from neuroglancer import credentials_provider
@@ -22,7 +20,7 @@ from neuroglancer.default_credentials_manager import default_credentials_manager
 
 from .layers import SegmentationLayer
 
-__all__ = ['FlyWireSegmentationLayer', 'FancSegmentationLayer']
+__all__ = ['FlyWireSegmentationLayer', 'FancSegmentationLayer', 'GrapheneSegmentationLayer']
 
 _global_graphene_credentials_provider = {}
 
