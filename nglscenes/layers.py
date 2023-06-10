@@ -269,6 +269,13 @@ class SegmentationLayer(BaseLayer):
     NG_LAYER = neuroglancer.SegmentationLayer
 
     def __init__(self, source, **kwargs):
+        if source.startswith('graphene') and 'middleauth' not in source:
+            logger.warning('Looks like you want to generate segmentation layer '
+                           'with a graphene (chunkedgraph) source. The '
+                           'recommended way of doing this is using the '
+                           'nglscenes.GrapheneSegmentationLayer class instead '
+                           'of a basic SegmentationLayer.')
+
         props = copy.deepcopy(self.DEFAULTS)
         props['source'] = source
         props.update(**kwargs)
