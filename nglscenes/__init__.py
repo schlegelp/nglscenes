@@ -18,3 +18,4 @@ from .local import *
 from .graphene import *
 
 from . import examples
+from . import dvid
