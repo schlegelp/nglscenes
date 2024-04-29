@@ -26,9 +26,7 @@ At this point, `nglscenes` has three different types of "scenes":
 
 ### Examples
 
-#### Basics
-
-Manually construct a simple scene
+#### Manually construct a simple scene
 
 ```python
 >>> from nglscenes import *
@@ -55,7 +53,7 @@ https://neuroglancer-demo.appspot.com/#!%7B%22laye[...]
 URL copied to clipboard.
 ```
 
-Manipulate a scene
+#### Manipulate a scene
 
 ```python
 >>> from nglscenes import *
@@ -79,7 +77,7 @@ https://fafb-dot-neuroglancer-demo.appspot.com/#!%7[...]
 3
 ```
 
-Combine two scenes
+#### Combine two scenes
 
 ```python
 >>> # Read two scenes
@@ -108,7 +106,7 @@ All of the above examples will also work with the other scene types.
 >>> from nglscenes import *
 >>> # Generate empty scene
 >>> scene = LocalScene()
->>> scene                                                                                                                        
+>>> scene
 <LocalScene(1 segmentation, 0 mesh, 1 image, 1 annotation)>
 
 http://127.0.0.1:53955/v/4dc530306753007bd4fc39b745673d604e58d2a5/
