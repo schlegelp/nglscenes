@@ -12,12 +12,13 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 
-from .local import LocalScene
+from .local import LocalScene, LocalAnnotationLayer
 from .serve import server, InMemoryDataSource
 from .layers import SegmentationLayer
 from .examples import FlyWireScene, FancScene, FAFBScene
+from .utils import parse_objects
 
-__all__ = ['Neuroglancer']
+__all__ = ['Viewer']
 
 PRECONFIG_SCENES = {
     'FlyWire': FlyWireScene,
@@ -51,12 +52,9 @@ class Viewer:
 
         # Set up sources and layers for the data we will want to add
         self.data_source = InMemoryDataSource()
-        self.ann_layer = SegmentationLayer(source=self.data_source.url + '/annotations',
-                                           ignoreSegmentInteractions=True,
-                                           name='_annotations')
 
         if open:
-            self.scene.open()
+            self.open()
 
     @property
     def mesh_layer(self):
@@ -71,10 +69,17 @@ class Viewer:
     def skel_layer(self):
         if not hasattr(self, '_skel_layer'):
             self._skel_layer = SegmentationLayer(source=self.data_source.url + '/skeletons',
-                                                ignoreSegmentInteractions=True,
-                                                name='_skeletons')
+                                                 ignoreSegmentInteractions=True,
+                                                 name='_skeletons')
             self.scene.add_layers(self._skel_layer)
         return self._skel_layer
+
+    @property
+    def scatter_layer(self):
+        if not hasattr(self, '_scatter_layer'):
+            self._scatter_layer = LocalAnnotationLayer(name='_scatter')
+            self.scene.add_layers(self._scatter_layer)
+        return self._scatter_layer
 
     @classmethod
     def from_url(cls, url, **kwargs):
@@ -121,24 +126,51 @@ class Viewer:
         None
 
         """
-        if layer is None:
-            layer = ['_meshes', '_skeletons']
-        for l in layer:
-            assert l in self.scene.layers
+        meshes, skeletons, annotations = parse_objects(x)
 
-        # First make the data available
-        segs = self.data_source.add_data(x)
+        if layer is not None:
+            assert layer in self.scene.layers, f'Layer {layer} not in scene'
 
-        # Clear the viewer
-        for l in layer:
+        if meshes:
+            # First make the data available
+            segs = self.data_source.add_data(meshes)
+
+            if layer:
+                l = self.scene.layers[l]
+            else:
+                l = self.mesh_layer
+
             if clear:
-                self.scene.layers[l]['segments'] = []
+                l['segments'] = []
 
             # Actually select
             if select:
-                self.scene.layers[l]['segments'] = self.scene.layers[l].get('segments', []) + segs
+                l['segments'] = l.get('segments', []) + segs
 
+        if skeletons:
+            # First make the data available
+            segs = self.data_source.add_data(skeletons)
 
+            if layer:
+                l = self.scene.layers[l]
+            else:
+                l = self.skel_layer
+
+            if clear:
+                l['segments'] = []
+
+            # Actually select
+            if select:
+                l['segments'] = l.get('segments', []) + segs
+
+    def clear(self):
+        """Clear local objects from the data layer."""
+        self.skel_layer['segments'] = []
+        self.mesh_layer['segments'] = []
+
+    def open(self):
+        """Open the Viewer in browser."""
+        self.scene.open()
 
 
 primary_viewer = None
