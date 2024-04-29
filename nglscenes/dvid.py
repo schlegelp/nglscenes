@@ -13,7 +13,7 @@
 #    GNU General Public License for more details.
 """This module simply registers a credential provider for DVID sources.
 
-By default, that provider doesn't do anything (i.e. assumes no authenticaiton
+By default, that provider doesn't do anything (i.e. assumes no authentication
 is required). If you need authentication, set a DVID_APPLICATION_CREDENTIALS
 environment variable with the token to use.
 

@@ -235,7 +235,8 @@ class Scene:
         Parameters
         ----------
         *layers
-                    The layer(s) to add.
+                    The layer(s) to add. Must be instances of BaseLayer such as
+                    ngl.SegmentationLayer.
 
         """
         for l in layers:

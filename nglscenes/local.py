@@ -47,7 +47,7 @@ class LocalMeshLayer(BaseLayer):
     source :        str | callable
                     Either a directory or zip file containing SWC files, or a
                     function that accepts and ID and returns a neuroglancer
-                    Skeleton.
+                    Mesh.
     units,scales :  str, list of int
                     Units and scale the skeletons are in.
     **kwargs
@@ -487,7 +487,7 @@ class LocalScene(Scene):
         source :    str | callable
                     Either a directory or a zip file containing meshes (anything
                     that trimesh can read), or a function that accepts an ID and
-                    returns a `neuroglancer.Skeleton`.
+                    returns a `neuroglancer.Mesh`.
         name :      str, optional
                     Name for the new layer. Must be unique.
         **kwargs

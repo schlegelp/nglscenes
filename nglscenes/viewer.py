@@ -35,7 +35,7 @@ class Viewer:
     Parameters
     ----------
     scene :     LocalScene
-                Pass to plug into an existing scene instead of spawning a new
+                Pass to connect to an existing scene instead of spawning a new
                 viewer.
 
     """
@@ -105,15 +105,16 @@ class Viewer:
                       - Points are added as separate annotation layer
                       - Dotprops are converted to skeletons
         layer :     str | int, optional
-                    The layer to add the data to. If ``None``, will pick the
-                    first available local data layer or create a new one if
-                    required.
+                    The layer to add the data to. If ``None``, will put the data
+                    in genericically added layers.
         center :    bool
-                    Whether to center on the newly add objects.
+                    Whether to center on the newly added objects.
         clear :     bool, optional
                     If True, clear layer before adding new objects.
         select :    bool
-                    If True, the added objects are immediately selected.
+                    If True, the added objects are immediately selected. If
+                    False, will only add objects to data source, i.e. make them
+                    available to be selected.
 
         Returns
         -------
