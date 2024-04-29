@@ -497,7 +497,7 @@ class LocalScene(Scene):
         name = find_name(name=name, scene=self, default='meshes')
 
         # The new layer
-        self.add_layers(LocalSkeletonLayer(source=source, name=name, **kwargs))
+        self.add_layers(LocalMeshLayer(source=source, name=name, **kwargs))
 
     def keybind_function(self, func, name, key):
         """Bind function to key.
