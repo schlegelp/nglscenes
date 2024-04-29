@@ -9,15 +9,19 @@
 #
 #    This program is distributed in the hope that it will be useful,
 #    but WITHOUT ANY WARRANTY; without even the implied warranty of
-#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 #    GNU General Public License for more details.
 
+import os
 import copy
 import logging
 import neuroglancer
 
 from abc import ABC
 from collections import OrderedDict
+
+import numpy as np
+import matplotlib.colors as mcl
 
 from .utils import add_on_change_callback, remove_callback
 
@@ -296,10 +300,81 @@ class SegmentationLayer(BaseLayer):
 
     def __str__(self):
         source = self['source']
+        if isinstance(source, list):
+            source = source[0]
+
         if isinstance(source, dict):
             source = source.get('url', source)
 
         return f'<{self.type}(name={self.name}, source={source}, selected segments={len(self.get("segments", []))})>'
+
+    def set_colors(self, x):
+        """Set colors for segments.
+
+        Parameters
+        ----------
+        x :     str | tuple | list | dict
+                Colors to set. Can be:
+                 - a string with a single color for all selected segments (e.g. "w")
+                 - an RGB tuple with a single color for all selected segments
+                 - a list of strings or RGB tuples with same length as selected
+                   segments
+                 - a dictionary mapping segment IDs to colours (strings or RGB
+                   tuples)
+                RGB colors must be in 0-1 range.
+
+        """
+        assert isinstance(x, (str, tuple, list, dict, np.ndarray))
+
+        segments = self.get('segments', [])
+
+        # Parse color(s)
+        # 1. Single color (e.g. "white")
+        if isinstance(x, str):
+            seg_colors = {s: x for s in segments}
+        # 2. A single (r, g, b) color
+        elif isinstance(x, tuple) and len(x) == 3:
+            seg_colors = {s: x for s in segments}
+        # 3. A (N, ) list of labels
+        elif isinstance(x, (np.ndarray, list)):
+            if len(x) != len(segments):
+                raise ValueError(
+                    f"Got {len(x)} colors for {len(segments)} segments."
+                )
+
+            seg_colors = dict(zip(segments, x))
+        elif isinstance(x, dict):
+            seg_colors = x
+        else:
+            raise TypeError('Colors must be strings, RGB tuples, a list thereof '
+                            f'or a dictionary. Got {type(x)}')
+
+        # Turn colors into hex codes
+        # Also make sure keys are strings
+        seg_colors = {str(s): mcl.to_hex(c) for s, c in seg_colors.items()}
+
+        if "segmentColors" not in self:
+            self["segmentColors"] = {}
+
+        # Assign colors
+        self["segmentColors"].update(seg_colors)
+
+    def clear_colors(self):
+        """Clear all existing segment colors."""
+        self.pop('segmentColors', None)
+
+    def invert(self):
+        """Invert selection.
+
+        Compares the segment query with currently visible neurons and
+        inverts the selection.
+
+        """
+        # Segment Query is a string
+        query = [s.strip() for s in self.get('segmentQuery', '').split(',')]
+        sel = self.get('segments', [])
+
+        self['segments'] = [s for s in query if s not in sel]
 
 
 class AnnotationLayer(BaseLayer):
