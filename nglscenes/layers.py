@@ -419,7 +419,14 @@ class LayerManager:
         return f'LayerManager<{len(self)} layers>'
 
     def __repr__(self):
-        lstr = "\n".join([str(l) for l in self.scene.layers])
+        twidth = os.get_terminal_size().columns
+        lstr = []
+        for i, l in enumerate(self.scene.layers):
+            s = f"{i}: {l}"
+            if len(s) > twidth:
+                s = s[:(twidth // 2) - 2] + '...' + s[-((twidth // 2) - 2):]
+                lstr.append(s)
+        lstr = "\n".join(lstr)
         return f'LayerManager with {len(self)} layers:\n{lstr}'
 
     def __len__(self):
