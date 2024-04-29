@@ -203,6 +203,11 @@ class Scene:
         return cls.from_string(scene)
 
     @classmethod
+    def from_dict(cls, scene):
+        """Generate scene from a state dict."""
+        return cls.from_string(scene)
+
+    @classmethod
     def from_string(cls, scene):
         """Generate scene from either a JSON or URL."""
         # Extract json

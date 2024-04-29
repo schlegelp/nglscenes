@@ -163,6 +163,9 @@ def remove_callback(x, recursive=True):
 
 def parse_json_scene(scene):
     """Parse string (either URL or a JSON) into a dictionary."""
+    if isinstance(scene, dict):
+        return scene
+
     if not isinstance(scene, str):
         raise ValueError(f'Expected str, got "{type(scene)}"')
 
