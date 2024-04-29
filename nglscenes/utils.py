@@ -16,9 +16,7 @@
 import functools
 import neuroglancer
 import requests
-import struct
 import json
-import io
 
 import numpy as np
 import pandas as pd
@@ -180,20 +178,27 @@ def parse_json_scene(scene):
 
 def parse_state_url(x):
     """Fetch scene from a state server."""
-    parsed = urlparse(x)
-    url = parsed.query.replace('json_url=', '')
+    if "json_url" in x:
+        parsed = urlparse(x)
+        url = parsed.query.replace('json_url=', '')
 
-    # FlyWire needs authentication
-    if urlparse(url).netloc == 'globalv1.flywire-daf.com':
-
-        # Fetch state
-        token = get_cave_credentials()
-        headers = {'Authorization': f"Bearer {token}"}
-    else:
+        # FlyWire needs authentication
         headers = {}
+        if urlparse(url).netloc == 'globalv1.flywire-daf.com':
 
-    r = requests.get(url, headers=headers)
-    r.raise_for_status()
+            # Fetch state
+            token = get_cave_credentials()
+            headers['Authorization'] = f"Bearer {token}"
+
+        r = requests.get(url, headers=headers)
+        r.raise_for_status()
+    # Parse URLs with a link to Google buckets
+    elif '!gs://' in x:
+        path = urlparse(x).fragment.replace('!gs://', '')
+        r = requests.get(f'https://storage.googleapis.com/{path}')
+        r.raise_for_status()
+    else:
+        raise ValueError(f'Unable to parse state from URL: {x}')
 
     return r.json()
 
@@ -233,7 +238,7 @@ def is_state_url(x):
     """Check if URL points to a state server."""
     if not is_url(x):
         return False
-    if 'json_url=http' in x:
+    if ('json_url=http' in x) or ('!gs:// 'in x):
         return True
     return False
 
