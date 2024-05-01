@@ -232,6 +232,11 @@ class Scene:
 
         return x
 
+    @classmethod
+    def from_url(cls, url):
+        """Generate scene from URL."""
+        return cls.from_string(url)
+
     def add_layers(self, *layers):
         """Add layer to scene.
 
