@@ -241,7 +241,7 @@ def is_state_url(x):
     """Check if URL points to a state server."""
     if not is_url(x):
         return False
-    if ('json_url=http' in x) or ('!gs:// 'in x):
+    if ('json_url=http' in x) or ('!gs://'in x):
         return True
     return False
 
