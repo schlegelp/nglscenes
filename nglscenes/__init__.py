@@ -16,6 +16,7 @@ from .scenes import *
 from .layers import *
 from .local import *
 from .graphene import *
+from .properties import *
 
 from . import examples
 from . import dvid
