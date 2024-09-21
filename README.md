@@ -1,9 +1,15 @@
 [![Tests](https://github.com/schlegelp/nglscenes/actions/workflows/test-package.yml/badge.svg)](https://github.com/schlegelp/nglscenes/actions/workflows/test-package.yml)
 
 # nglscenes
-A low-level interface to generate and manipulate [neuroglancer](https://github.com/google/neuroglancer) scenes.
+An interface to generate and manipulate [neuroglancer](https://github.com/google/neuroglancer) scenes.
 
-This is very much WIP and implementation details might change at any point!
+## Features
+
+- extract scenes from URLs, clipboard, (JSON) files or strings
+- manipulate state dictionary
+- write scenes to files or clipboard
+- easily create segment properties
+- run and remote-control a local neuroglancer
 
 ## Install
 
@@ -15,14 +21,11 @@ $ pip3 install git+https://github.com/schlegelp/nglscenes@main
 
 ### Overview
 
-At this point, `nglscenes` has three different types of "scenes":
+At this point, `nglscenes` has two different types of "scenes":
 
 1. Use a basic `Scene` to construct and manipulate neuroglancer states.
-2. A `StateScene` is a scene that works with a state server instead of encoding
-   the JSON state into a long URL.
-3. If you want to work locally, you should use a `LocalScene` which starts a
-   local neuroglancer server and then keeps the state between the browser and
-   Python synced.
+2. Use a `LocalScene` to starts a local neuroglancer server which then
+   keeps the state between the browser and Python synced.
 
 ### Examples
 
@@ -31,7 +34,7 @@ At this point, `nglscenes` has three different types of "scenes":
 ```python
 >>> from nglscenes import *
 >>> # Generate empty scene
->>> scene = Scene(base_url='https://neuroglancer-demo.appspot.com')
+>>> scene = Scene()
 
 >>> # Generate some layers
 >>> img = ImageLayer(source='precomputed://gs://neuroglancer-fafb-data/fafb_v14/fafb_v14_clahe')
