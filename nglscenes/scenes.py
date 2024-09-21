@@ -126,7 +126,7 @@ class Scene:
         return x
 
     def __eq__(self, other):
-        if type(other) != type(self):
+        if type(other) is not type(self):
             return False
         if self.state != other.state:
             return False
@@ -174,34 +174,39 @@ class Scene:
         return len(self.layers)
 
     def __str__(self):
-        layer_str = []
-        for lt, ty in LAYER_FACTORY.items():
-            this = [l for l in self.layers if isinstance(l, ty)]
-            if this:
-                layer_str.append(f"{len(this)} {lt}")
-        if not layer_str:
-            layer_str = "no"
+        if not len(self):
+            layer_str = "none"
+        else:
+            layer_str = []
+            for lt, ty in LAYER_FACTORY.items():
+                this = [l for l in self.layers if isinstance(l, ty)]
+                if this:
+                    layer_str.append(f"{len(this)} {lt}")
+            layer_str = ", ".join(layer_str)
+
         url = self.url
         if len(url) >= 60:
             url = url[:30] + "[...]" + url[-30:]
-        return f'<{self.type}({", ".join(layer_str)} layers)>\n\n{url}'
+        return f"<nglscenes.{type(self).__name__}(layers={layer_str}; url={url})>"
 
     def __repr__(self):
         return self.__str__()
 
     def _repr_html_(self):
-        layer_str = []
-        for lt, ty in LAYER_FACTORY.items():
-            this = [l for l in self.layers if isinstance(l, ty)]
-            if this:
-                layer_str.append(f"{len(this)} {lt}")
-        if not layer_str:
-            layer_str = "no"
+        if not len(self):
+            layer_str = "none"
+        else:
+            layer_str = []
+            for lt, ty in LAYER_FACTORY.items():
+                this = [l for l in self.layers if isinstance(l, ty)]
+                if this:
+                    layer_str.append(f"{len(this)} {lt}")
+            layer_str = ", ".join(layer_str)
+
         url = self.url
         if len(url) >= 60:
-            url = url[:30] + " [...] " + url[-30:]
-        return f"""&lt;{self.type}({", ".join(layer_str)} layers)&gt;<br>
-                <a href="{self.url}" target="_blank">{url}</a>"""
+            url = url[:30] + "[...]" + url[-30:]
+        return f'&lt;nglscenes.{type(self).__name__}(layers={layer_str}; url=<a href="{self.url}" target="_blank">{url}</a>)&gt;'
 
     @classmethod
     def from_clipboard(cls):

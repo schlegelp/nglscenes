@@ -38,6 +38,11 @@ class BaseLayer(ABC):
     MUST_NOT_HAVE = []
     MUST_ONLY_HAVE = []
 
+    # Defines possible conversions of state values
+    # E.g. in segmentation layers, we expect "segments" to
+    # always be a list of strings
+    STATE_CONVERSION = {}
+
     # This must be the corresponding layer in `neuroglancer`
     NG_LAYER = None
 
@@ -82,7 +87,7 @@ class BaseLayer(ABC):
         return self._viewer
 
     def __eq__(self, other):
-        if type(other) != type(self):
+        if type(other) is not type(self):
             return False
         if self.state != other.state:
             return False
@@ -114,6 +119,11 @@ class BaseLayer(ABC):
 
     def __setitem__(self, name, value):
         """Set a layer attribute."""
+        # Check if we need to convert the value somehow
+        if name in self.STATE_CONVERSION:
+            if type(value) in self.STATE_CONVERSION[name]:
+                value = self.STATE_CONVERSION[name][type(value)](value)
+
         self._state[name] = value
 
     def __getitem__(self, name):
@@ -129,7 +139,7 @@ class BaseLayer(ABC):
         return False
 
     def __or__(self, other):
-        if type(other) != type(self):
+        if type(other) is not type(self):
             raise NotImplementedError(f'Unable to combine {type(other)} with '
                                       f'{self.type}')
         raise NotImplementedError(f'Combination not implemented for {self.type}')
@@ -249,7 +259,7 @@ class ImageLayer(BaseLayer):
         super().__init__(**props)
 
     def __or__(self, other):
-        if type(other) != type(self):
+        if type(other) is not type(self):
             raise NotImplementedError(f'Unable to combine {type(other)} with '
                                       f'{self.type}')
         if self['source'] != other['source']:
@@ -270,6 +280,23 @@ class SegmentationLayer(BaseLayer):
                             'name': 'segmentation'})
     MUST_HAVE = ['name', 'source']
 
+    STATE_CONVERSION = {
+        'segments': {
+            int : lambda x: [str(x)],
+            str : lambda x: [x],
+            list : lambda x: [str(s) for s in x],
+            np.ndarray: lambda x: x.astype(str).tolist()
+        },
+        'segmentColors': {
+            dict: lambda x: {str(k): mcl.to_hex(v) for k, v in x.items()}
+        },
+        "segmentDefaultColor": {
+            str: lambda x: mcl.to_hex(x),
+            tuple: lambda x: mcl.to_hex(x),
+            np.ndarray: lambda x: mcl.to_hex(x)
+        }
+    }
+
     NG_LAYER = neuroglancer.SegmentationLayer
 
     def __init__(self, source, **kwargs):
@@ -287,7 +314,7 @@ class SegmentationLayer(BaseLayer):
         super().__init__(**props)
 
     def __or__(self, other):
-        if type(other) != type(self):
+        if type(other) is not type(self):
             raise NotImplementedError(f'Unable to combine {type(other)} with '
                                       f'{self.type}')
         if self['source'] != other['source']:
@@ -297,6 +324,10 @@ class SegmentationLayer(BaseLayer):
         # Combine selected segments
         x['segments'] = list(set(x['segments'] + other['segments']))
         return x
+
+    def __setitem__(self, name, value):
+        """Set a layer attribute."""
+        super().__setitem__(name, value)
 
     def __str__(self):
         source = self['source']
