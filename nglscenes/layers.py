@@ -339,6 +339,22 @@ class SegmentationLayer(BaseLayer):
 
         return f'<{self.type}(name={self.name}, source={source}, selected segments={len(self.get("segments", []))})>'
 
+    def add_subsource(self, subsource):
+        """Add a subsource to the layer.
+
+        Parameters
+        ----------
+        subsource :     str
+                        Subsource to add.
+
+        """
+        assert isinstance(subsource, str)
+
+        if isinstance(self["source"], (str, dict)):
+            self["source"] = [self["source"], subsource]
+        elif isinstance(self["source"], list):
+            self["source"].append(subsource)
+
     def set_colors(self, x):
         """Set colors for segments.
 
@@ -456,7 +472,7 @@ class LayerManager:
             s = f"{i}: {l}"
             if len(s) > twidth:
                 s = s[:(twidth // 2) - 2] + '...' + s[-((twidth // 2) - 2):]
-                lstr.append(s)
+            lstr.append(s)
         lstr = "\n".join(lstr)
         return f'LayerManager with {len(self)} layers:\n{lstr}'
 
