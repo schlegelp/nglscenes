@@ -217,21 +217,29 @@ class Scene:
         return cls.from_string(scene)
 
     @classmethod
-    def from_dict(cls, scene):
+    def from_dict(cls, dict):
         """Generate scene from a state dict."""
+        return cls.from_string(dict)
+
+    @classmethod
+    def from_file(cls, fp):
+        """Generate scene from a file."""
+        with open(fp, "r") as f:
+            scene = json.load(f)
+
         return cls.from_string(scene)
 
     @classmethod
-    def from_string(cls, scene):
+    def from_string(cls, string):
         """Generate scene from either a JSON or URL."""
         # Extract json
-        state = utils.parse_json_scene(scene)
+        state = utils.parse_json_scene(string)
 
         # If input is URL, reuse the base URL
         sig = inspect.signature(cls)
         has_url = "url" in sig.parameters or "base_url" in sig.parameters
-        if utils.is_url(scene) and has_url:
-            url, frag = urldefrag(scene)
+        if utils.is_url(string) and has_url:
+            url, frag = urldefrag(string)
             x = cls(base_url=url)
         else:
             x = cls()
@@ -275,13 +283,14 @@ class Scene:
         ), 'DataFrame must contain an "id" or "segment_id" column.'
         assert "source" in df.columns, 'DataFrame must contain a "source" column.'
 
-        if "id" not in df.columns:
-            df = df.rename(columns={"segment_id": "id"})
-
         if layer_col is not None:
             assert layer_col in df.columns, f'Column "{layer_col}" not in DataFrame.'
         if color_col is not None:
             assert color_col in df.columns, f'Column "{color_col}" not in DataFrame.'
+
+        # Rename `segment_id`` column to `id`
+        if "id" not in df.columns:
+            df = df.rename(columns={"segment_id": "id"})
 
         # Generate the scene
         x = cls(**kwargs)
@@ -294,22 +303,25 @@ class Scene:
                     layer["name"] = str(layer_name)
                     layer["segments"] = sdf["id"].values.astype(str).tolist()
                     if color_col is not None:
-                        layer.set_colors(sdf.astype({"id": str}).set_index('id')[color_col].to_dict())
+                        layer.set_colors(
+                            sdf.astype({"id": str}).set_index("id")[color_col].to_dict()
+                        )
 
                     x.add_layers(layer)
             else:
                 layer = SegmentationLayer(source=source)
-                layer['segments'] = df['id'].values.astype(str).tolist()
+                layer["segments"] = df["id"].values.astype(str).tolist()
 
                 if color_col is not None:
-                    layer.set_colors(df.astype({"id": str}).set_index('id')[color_col].to_dict())
+                    layer.set_colors(
+                        df.astype({"id": str}).set_index("id")[color_col].to_dict()
+                    )
 
                 x.add_layers(layer)
 
         return x
 
-
-    def add_layers(self, *layers):
+    def add_layers(self, *layers, index=None):
         """Add layer to scene.
 
         Non-unique names will be given a suffix, e.g. "-2".
@@ -319,6 +331,8 @@ class Scene:
         *layers
                     The layer(s) to add. Must be instances of BaseLayer such as
                     ngl.SegmentationLayer.
+        index :     int, optional
+                    Index at which to insert the layer(s). Default is to append.
 
         """
         for l in layers:
@@ -335,7 +349,12 @@ class Scene:
                     l["name"] = f"{org_name}-{i}"
                 i += 1
 
-            self._layers.append(l)
+            if index is None:
+                self._layers.append(l)
+            elif isinstance(index, int):
+                self._layers.insert(index, l)
+                index += 1
+
             self._stale = True
 
     def copy(self):
@@ -390,6 +409,20 @@ class Scene:
             .replace("False", "false")
         )
 
+    def to_file(self, fp):
+        """Save scene to file."""
+        with open(fp, "w") as f:
+            f.write(self.to_json(pretty=True))
+
+    def to_clipboard(self, scene_only=False):
+        """Copy URL to clipboard."""
+        if scene_only:
+            pyperclip.copy(self.to_json(pretty=True))
+            print("Scene copied to clipboard.")
+        else:
+            pyperclip.copy(self.url)
+            print("URL copied to clipboard.")
+
     def make_url(self):
         """Generate/Update URL."""
         scene_str = self.to_json(pretty=False)
@@ -408,15 +441,6 @@ class Scene:
             wb.open_new(self.url)
         else:
             wb.open_new_tab(self.url)
-
-    def to_clipboard(self, scene_only=False):
-        """Copy URL to clipboard."""
-        if scene_only:
-            pyperclip.copy(self.to_json(pretty=True))
-            print("Scene copied to clipboard.")
-        else:
-            pyperclip.copy(self.url)
-            print("URL copied to clipboard.")
 
 
 LAYER_FACTORY = {
