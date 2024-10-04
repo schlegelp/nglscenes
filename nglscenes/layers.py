@@ -440,6 +440,23 @@ class AnnotationLayer(BaseLayer):
         props.update(**kwargs)
         super().__init__(**props)
 
+    def to_pandas(self):
+        """Convert annotations in the layer to a pandas DataFrame."""
+
+        if self.state.get("tool", None) == "annotatePoint":
+            df = pd.DataFrame()
+            df["id"] = [a["id"] for a in self.state["annotations"]]
+            df["x"] = [a["point"][0] for a in self.state["annotations"]]
+            df["y"] = [a["point"][1] for a in self.state["annotations"]]
+            df["z"] = [a["point"][2] for a in self.state["annotations"]]
+        else:
+            raise NotImplementedError(
+                f'Converting {self.state.get("tool", "NA")} annotations '
+                ' to pandas DataFrame currently not supported'
+            )
+
+        return df
+
 
 class MeshLayer(BaseLayer):
     """Mesh layer."""
