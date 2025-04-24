@@ -430,12 +430,23 @@ class Scene:
         self._stale = False
         return self._url
 
-    def open(self, new_window=False):
-        """Open URL in webbrowser."""
-        try:
-            wb = webbrowser.get("chrome")
-        except BaseException:
+    def open(self, new_window=False, browser=None):
+        """Open URL in default webbrowser.
+
+        Parameters
+        ----------
+        new_window : bool, optional
+                     If True, open URL in a new window. Defaults
+                     to opening in a new tab (if possible).
+        browser :    str, optional
+                     The name of the browser to use. If None, the
+                     default browser will be used.
+
+        """
+        if not browser:
             wb = webbrowser
+        else:
+            wb = webbrowser.get(browser)
 
         if new_window:
             wb.open_new(self.url)
