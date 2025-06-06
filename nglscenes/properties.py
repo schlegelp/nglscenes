@@ -302,7 +302,7 @@ def _parse_tags_property(series):
     # Translate tags to numbers
     if isinstance(series.values[0], list):
         # Flatten list of lists
-        tags = np.unique([t for l in series.values for t in l])
+        tags = np.unique([str(t) for l in series.values for t in l])
         tag_dict = {fix_tag(tag): i for i, tag in enumerate(tags)}
         series = series.apply(lambda x: [tag_dict[t] for t in x])
     else:
