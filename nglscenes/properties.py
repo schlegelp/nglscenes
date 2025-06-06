@@ -304,7 +304,7 @@ def _parse_tags_property(series):
         # Flatten list of lists
         tags = np.unique([str(t) for l in series.values for t in l])
         tag_dict = {fix_tag(tag): i for i, tag in enumerate(tags)}
-        series = series.apply(lambda x: [tag_dict[str(t)] for t in x])
+        series = series.apply(lambda x: [tag_dict[fix_tag(t)] for t in x])
     else:
         tags = series.unique()
         tag_dict = {fix_tag(tag): i for i, tag in enumerate(tags)}
