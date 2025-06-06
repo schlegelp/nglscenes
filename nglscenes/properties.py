@@ -203,11 +203,6 @@ class SegmentProperties:
 
         # Tags must not start with "#" and not contain spaces
         if type == "tags":
-            data = data.copy()  # avoid modifying the original data
-            hash_prefix = data.str.startswith("#")
-            data.loc[hash_prefix] = data.loc[hash_prefix].str[1:]
-            data = data.str.replace(" ", "_")
-
             prop = _parse_tags_property(data)
         elif type == "label":
             prop = _parse_label_property(data)
@@ -293,17 +288,26 @@ def _parse_label_property(series):
 
 
 def _parse_tags_property(series):
-    series = series.astype(str)
+    # series = series.astype(str)
+
+    def fix_tag(tag):
+        if not isinstance(tag, str):
+            tag = str(tag)
+
+        if tag.startswith("#"):
+            tag = tag[1:]
+
+        return tag.replace(" ", "_")
 
     # Translate tags to numbers
     if isinstance(series.values[0], list):
         # Flatten list of lists
-        tags = np.unique([t for l in series.unique() for t in l])
-        tag_dict = {tag: i for i, tag in enumerate(tags)}
+        tags = np.unique([t for l in series.values for t in l])
+        tag_dict = {fix_tag(tag): i for i, tag in enumerate(tags)}
         series = series.apply(lambda x: [tag_dict[t] for t in x])
     else:
         tags = series.unique()
-        tag_dict = {tag: i for i, tag in enumerate(tags)}
+        tag_dict = {fix_tag(tag): i for i, tag in enumerate(tags)}
         series = series.map(tag_dict).apply(lambda x: [x])
 
     return {
