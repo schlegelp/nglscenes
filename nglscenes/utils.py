@@ -181,14 +181,19 @@ def parse_json_scene(scene):
 
 def parse_state_url(x):
     """Fetch scene from a state server."""
-    if "json_url" in x:
+    if "json_url" in x or "!middleauth" in x:
         parsed = urlparse(x)
-        url = parsed.query.replace('json_url=', '')
+        # `?json_url` will show up as query, `!middleauth+` as fragment
+        if parsed.query:
+            url = parsed.query.replace('json_url=', '')
+        elif parsed.fragment:
+            url = parsed.fragment.replace('!middleauth+', '')
+        else:
+            raise ValueError(f'Unable to parse state URL from: {parsed}')
 
-        # FlyWire needs authentication
+        # CAVE needs authentication
         headers = {}
-        if urlparse(url).netloc == 'globalv1.flywire-daf.com':
-
+        if urlparse(url).netloc in ('globalv1.flywire-daf.com', 'global.daf-apis.com'):
             # Fetch state
             token = get_cave_credentials()
             headers['Authorization'] = f"Bearer {token}"
