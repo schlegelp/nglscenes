@@ -94,7 +94,7 @@ class Scene:
     def __add__(self, other):
         if not isinstance(other, Scene):
             raise NotImplementedError(
-                f"Unable to combine {type(other)} with " f"{self.type}"
+                f"Unable to combine {type(other)} with {self.type}"
             )
         x = copy.deepcopy(self)
         x.add_layers(*copy.deepcopy(other._layers))
@@ -103,9 +103,7 @@ class Scene:
 
     def __or__(self, other):
         if not isinstance(other, Scene):
-            raise NotImplementedError(
-                f"Unable to merge {type(other)} with " f"{self.type}"
-            )
+            raise NotImplementedError(f"Unable to merge {type(other)} with {self.type}")
 
         x = copy.deepcopy(self)
         for l1 in copy.deepcopy(other._layers):
@@ -230,8 +228,18 @@ class Scene:
         return cls.from_string(scene)
 
     @classmethod
-    def from_string(cls, string):
-        """Generate scene from either a JSON or URL."""
+    def from_string(cls, string, skip_archived=False):
+        """Generate scene from either a JSON or URL.
+
+        Parameters
+        ----------
+        string :        str | dict
+                        Either a JSON-formatted string or a URL containing
+                        a JSON fragment.
+        skip_archived : bool, optional
+                        If True, skip archived layers. Default: False.
+
+        """
         # Extract json
         state = utils.parse_json_scene(string)
 
@@ -244,7 +252,7 @@ class Scene:
         else:
             x = cls()
 
-        layers = parse_layers(state.pop("layers", []))
+        layers = parse_layers(state.pop("layers", []), skip_archived=skip_archived)
 
         # Update properties
         x._state.update(state)
@@ -255,9 +263,18 @@ class Scene:
         return x
 
     @classmethod
-    def from_url(cls, url):
-        """Generate scene from URL."""
-        return cls.from_string(url)
+    def from_url(cls, url, skip_archived=False):
+        """Generate scene from URL.
+
+        Parameters
+        ----------
+        url :           str
+                        The URL.
+        skip_archived : bool, optional
+                        If True, skip archived layers. Default: False.
+
+        """
+        return cls.from_string(url, skip_archived=skip_archived)
 
     @classmethod
     def from_pandas(cls, df, layer_col=None, color_col=None, **kwargs):
@@ -278,9 +295,9 @@ class Scene:
                     Additional keyword arguments to pass to the Scene constructor.
 
         """
-        assert (
-            "id" in df.columns or "segment_id" in df.columns
-        ), 'DataFrame must contain an "id" or "segment_id" column.'
+        assert "id" in df.columns or "segment_id" in df.columns, (
+            'DataFrame must contain an "id" or "segment_id" column.'
+        )
         assert "source" in df.columns, 'DataFrame must contain a "source" column.'
 
         if layer_col is not None:
@@ -383,8 +400,7 @@ class Scene:
         elif isinstance(which, int):
             if len(self.layers) <= which:
                 raise ValueError(
-                    f"Unable to drop layer {which}: only "
-                    f"{len(self.layers)} present."
+                    f"Unable to drop layer {which}: only {len(self.layers)} present."
                 )
             return self._layers.pop(which)
         else:
@@ -465,7 +481,7 @@ LAYER_FACTORY = {
 
 def parse_layers(layer, skip_unknown=False, skip_archived=True):
     if isinstance(layer, list):
-        res = [parse_layers(l) for l in layer]
+        res = [parse_layers(l, skip_archived=skip_archived) for l in layer]
         # Drop "None" if skip_unknown=True
         return [l for l in res if l]
 
