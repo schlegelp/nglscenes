@@ -406,9 +406,50 @@ class SegmentationLayer(BaseLayer):
         # Assign colors
         self["segmentColors"].update(seg_colors)
 
+    def color_by(self, x, palette="tab10"):
+        """Color segments by a property.
+
+        Parameters
+        ----------
+        x :     iterable
+                Property to color by. Must be the same length as the number of
+                selected segments.
+        palette :   str | dict
+                Name of the matplotlib or seaborn color palette to use.
+                Alternatively, a dictionary mapping property values to colors.
+
+        """
+        x = np.asarray(x)
+
+        if len(x) != len(self.get("segments", [])):
+            raise ValueError(
+                f"Got {len(x)} values for {len(self.get('segments', []))} segments."
+            )
+
+        # Get unique values
+        values = np.unique(x)
+
+        # Parse palette
+        if isinstance(palette, str):
+            palette = plt.get_cmap(palette)
+            colors = dict(zip(values, palette(np.linspace(0, 1, len(values)))))
+        elif isinstance(palette, dict):
+            if not all(v in palette for v in values):
+                raise ValueError("Palette must contain colors for all values.")
+            colors = palette
+        else:
+            raise TypeError(
+                f"Palette must be a string or a dictionary, got {type(palette)}"
+            )
+
+        # Assign colors
+        self["segmentColors"] = {
+            str(s): mcl.to_hex(colors[v]) for s, v in zip(self["segments"], x)
+        }
+
     def clear_colors(self):
         """Clear all existing segment colors."""
-        self.pop('segmentColors', None)
+        self.pop("segmentColors", None)
 
     def invert(self):
         """Invert selection.
