@@ -406,6 +406,38 @@ class Scene:
         else:
             raise TypeError(f"Expected str or int, got {type(which)}")
 
+    def move_layer(self, which, index):
+        """Move layer to a new position.
+
+        Parameters
+        ----------
+        which :     str | int
+                    Either index (int) or name (str) of layer to move.
+        index :     int
+                    The new index for the layer.
+
+        """
+        self._stale = True
+        if isinstance(which, str):
+            if which not in self.layers:
+                raise ValueError(f'No layer named "{which}".')
+            ix = [
+                i
+                for i, l in enumerate(self._layers)
+                if getattr(l, "name", None) == which
+            ][0]
+            l = self._layers.pop(ix)
+            self._layers.insert(index, l)
+        elif isinstance(which, int):
+            if len(self.layers) <= which:
+                raise ValueError(
+                    f"Unable to move layer {which}: only {len(self.layers)} present."
+                )
+            l = self._layers.pop(which)
+            self._layers.insert(index, l)
+        else:
+            raise TypeError(f"Expected str or int, got {type(which)}")
+
     def as_dict(self):
         """Generate a dictionary of the JSON state."""
         state = utils.remove_callback(self.state)
