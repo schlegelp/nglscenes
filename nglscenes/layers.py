@@ -675,3 +675,9 @@ class LayerManager:
             return self.scene._layers[layer]
         else:
             raise AttributeError(f'Unable to index layers by "{type(layer)}"')
+
+    def index(self, layer):
+        """Return index of layer in scene."""
+        if isinstance(layer, str):
+            layer = self.get_layer(layer)
+        return self.scene._layers.index(layer)
