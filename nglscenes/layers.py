@@ -630,7 +630,7 @@ class LayerManager:
             elif len(l) > 1:
                 raise AttributeError(f'Multiple layers called "{layer}" found.')
             return l[0]
-        elif isinstance(layer, int):
+        elif isinstance(layer, (int, np.integer)):
             return self.scene._layers[layer]
         else:
             raise AttributeError(f'Unable to index layers by "{type(layer)}"')
