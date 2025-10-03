@@ -427,18 +427,108 @@ class SegmentationLayer(BaseLayer):
 class AnnotationLayer(BaseLayer):
     """Annotation layer."""
 
-    DEFAULTS = OrderedDict({'source': '',
-                            'type': 'annotation',
-                            'name': 'annotations'})
-    MUST_HAVE = ['name', 'source']
+    DEFAULTS = OrderedDict(
+        {
+            "source": "local://annotations",
+            "type": "annotation",
+            "name": "annotations",
+            "annotations": [],
+        }
+    )
+    MUST_HAVE = ["name", "source"]
 
     NG_LAYER = neuroglancer.AnnotationLayer
 
-    def __init__(self, source, **kwargs):
+    def __init__(self, **kwargs):
         props = copy.deepcopy(self.DEFAULTS)
-        props['source'] = source
         props.update(**kwargs)
         super().__init__(**props)
+
+    @classmethod
+    def from_pandas(cls, df, **kwargs):
+        """Create an AnnotationLayer from a pandas DataFrame.
+
+        Parameters
+        ----------
+        df :    pd.DataFrame
+                DataFrame containing annotation points. The DataFrame must contain
+                columns 'x', 'y', and 'z' for the annotation points. If an 'id' column
+                is present, it will be used as the annotation ID.
+        **kwargs
+                Additional keyword arguments to pass to the AnnotationLayer constructor.
+
+        """
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("Input must be a pandas DataFrame.")
+
+        if not all(col in df.columns for col in ["x", "y", "z"]):
+            raise ValueError("DataFrame must contain 'x', 'y', and 'z' columns.")
+
+        annotations = [
+            {
+                "id": str(row.get("id")),
+                "type": "point",
+                "point": [float(row["x"]), float(row["y"]), float(row["z"])],
+            }
+            for i, (_, row) in enumerate(df.iterrows())
+        ]
+
+        return cls(annotations=annotations, **kwargs)
+
+    def add_points(self, points):
+        """Add points to the annotation layer.
+
+        Parameters
+        ----------
+        points : list of tuples | (N, 3) array | pd.DataFrame
+            List of (x, y, z) or (id, x, y, z) tuples representing the points to add.
+            Alternatively, a pandas DataFrame with columns 'x', 'y', 'z' and
+            an optional 'id' column.
+
+        """
+        if isinstance(points, pd.DataFrame):
+            if not all(col in points.columns for col in ["x", "y", "z"]):
+                raise ValueError("DataFrame must contain 'x', 'y', and 'z' columns.")
+            if "id" in points.columns:
+                points = [
+                    (row["id"], row["x"], row["y"], row["z"])
+                    for _, row in points.iterrows()
+                ]
+            else:
+                points = [
+                    (row["x"], row["y"], row["z"]) for _, row in points.iterrows()
+                ]
+        elif isinstance(points, np.ndarray):
+            if points.ndim != 2 or points.shape[1] != 3:
+                raise ValueError(f"Expect an (N, 3) array, got shape {points.shape}.")
+            points = points.tolist()
+
+        if not isinstance(points, list):
+            raise TypeError("Points must be a list of (x, y, z) tuples.")
+
+        for point in points:
+            if len(point) == 3:
+                annotation = {
+                    "id": str(len(self.state["annotations"])),
+                    "type": "point",
+                    "point": [float(coord) for coord in point],
+                }
+            elif len(point) == 4:
+                annotation = {
+                    "id": str(point[0]),
+                    "type": "point",
+                    "point": [float(coord) for coord in point[1:]],
+                }
+            else:
+                raise ValueError(
+                    "Each point must be a tuple of (x, y, z) or (id, x, y, z)."
+                )
+
+            self.state["annotations"].append(annotation)
+
+    def clear_annotations(self):
+        """Clear all annotations in the layer."""
+        self.state["annotations"] = []
 
     def to_pandas(self):
         """Convert annotations in the layer to a pandas DataFrame."""
