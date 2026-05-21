@@ -446,15 +446,10 @@ class Scene:
 
     def to_json(self, pretty=False):
         """Generate the JSON-formatted string describing the scene."""
-        return (
-            json.dumps(
-                self.as_dict(),
-                indent=4 if pretty else None,
-                sort_keys=True,
-            )
-            .replace("'", '"')
-            .replace("True", "true")
-            .replace("False", "false")
+        return json.dumps(
+            self.as_dict(),
+            indent=4 if pretty else None,
+            sort_keys=True,
         )
 
     def to_file(self, fp):
