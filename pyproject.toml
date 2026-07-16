@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nglscenes"
+dynamic = ["version", "dependencies"]
+description = "Tools to generate and manipulate neuroglancer scenes"
+readme = "README.md"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE"]
+requires-python = ">=3.9"
+authors = [
+    { name = "Philipp Schlegel", email = "pms70@cam.ac.uk" },
+]
+keywords = ["neuroglancer", "scenes", "FlyWire"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.urls]
+Homepage = "https://github.com/schlegelp/nglscenes"
+Documentation = "https://github.com/schlegelp/nglscenes"
+Source = "https://github.com/schlegelp/nglscenes"
+Changelog = "https://github.com/schlegelp/nglscenes/blob/main/NEWS.md"
+
+[tool.setuptools.packages.find]
+include = ["nglscenes", "nglscenes.*"]
+
+[tool.setuptools.dynamic]
+version = { attr = "nglscenes.__version__.__version__" }
+dependencies = { file = ["requirements.txt"] }

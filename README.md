@@ -13,8 +13,14 @@ An interface to generate and manipulate [neuroglancer](https://github.com/google
 
 ## Install
 
-```bash
-$ pip3 install git+https://github.com/schlegelp/nglscenes@main
+```shell
+$ pip install nglscenes
+```
+
+From Github:
+
+```shell
+$ pip install git+https://github.com/schlegelp/nglscenes@main
 ```
 
 ## Usage
