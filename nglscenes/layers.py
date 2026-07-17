@@ -679,6 +679,9 @@ class LayerManager:
                 self.iter = start
                 self.layers = layers
 
+            def __iter__(self):
+                return self
+
             def __next__(self):
                 if self.iter >= len(self.layers):
                     raise StopIteration
