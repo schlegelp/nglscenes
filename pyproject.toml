@@ -25,6 +25,15 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 
+[project.optional-dependencies]
+# Local neuroglancer server (LocalScene, local mesh/skeleton layers)
+local = ["neuroglancer", "trimesh"]
+# CAVE/graphene credentials (e.g. FlyWire)
+cave = ["cloud-volume"]
+# Local data server (nglscenes.viewer)
+serve = ["flask", "flask-cors", "nglscenes[local]"]
+all = ["nglscenes[local,cave,serve]"]
+
 [project.urls]
 Homepage = "https://github.com/schlegelp/nglscenes"
 Documentation = "https://github.com/schlegelp/nglscenes"

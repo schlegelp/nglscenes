@@ -129,16 +129,14 @@ class Viewer:
         meshes, skeletons, annotations = parse_objects(x)
 
         if layer is not None:
-            assert layer in self.scene.layers, f'Layer {layer} not in scene'
+            # Raises if layer (name or index) is not in scene
+            layer = self.scene.layers[layer]
 
         if meshes:
             # First make the data available
             segs = self.data_source.add_data(meshes)
 
-            if layer:
-                l = self.scene.layers[l]
-            else:
-                l = self.mesh_layer
+            l = layer if layer is not None else self.mesh_layer
 
             if clear:
                 l['segments'] = []
@@ -151,10 +149,7 @@ class Viewer:
             # First make the data available
             segs = self.data_source.add_data(skeletons)
 
-            if layer:
-                l = self.scene.layers[l]
-            else:
-                l = self.skel_layer
+            l = layer if layer is not None else self.skel_layer
 
             if clear:
                 l['segments'] = []

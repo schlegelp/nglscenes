@@ -12,50 +12,9 @@
 #    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 #    GNU General Public License for more details.
 
-import cloudvolume as cv
-
-from neuroglancer import credentials_provider
-from neuroglancer.futures import run_on_new_thread
-from neuroglancer.default_credentials_manager import default_credentials_manager
-
 from .layers import SegmentationLayer
 
 __all__ = ['FlyWireSegmentationLayer', 'FancSegmentationLayer', 'GrapheneSegmentationLayer']
-
-_global_graphene_credentials_provider = {}
-
-
-class GrapheneCredentialsProvider(credentials_provider.CredentialsProvider):
-    def __init__(self, domain='prod.flywire-daf.com'):
-        super(GrapheneCredentialsProvider, self).__init__()
-
-        self.domain = domain
-        self._credentials = {}
-        self._credentials['token'] = cv.secrets.cave_credentials(self.domain).get('token', None)
-
-        if not self._credentials['token']:
-            raise ValueError(f'No CAVE credentials for domain {self.domain} '
-                             'found. See cloud-volume for details on how to set it.')
-
-    def get_new(self):
-        def func():
-            return dict(tokenType=u'Bearer', accessToken=self._credentials['token'])
-
-        return run_on_new_thread(func)
-
-
-def get_credentials_provider(domain):
-    """Copy pasted from neuroglancer."""
-    global _global_graphene_credentials_provider
-    if domain not in _global_graphene_credentials_provider:
-        _global_graphene_credentials_provider[domain] = GrapheneCredentialsProvider(domain)
-    return _global_graphene_credentials_provider[domain]
-
-
-# Register authentication
-default_credentials_manager.register(
-     u'middleauthapp',
-     lambda domain: get_credentials_provider(domain))
 
 
 class GrapheneSegmentationLayer(SegmentationLayer):

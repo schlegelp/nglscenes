@@ -13,28 +13,39 @@
 #    GNU General Public License for more details.
 
 import copy
-import neuroglancer
 import logging
-import io
 import uuid
 
-import pandas as pd
 import numpy as np
-import trimesh as tm
 
 from collections import OrderedDict
-from pathlib import Path
-from zipfile import ZipFile
 
 from .scenes import Scene, parse_layers
 from .layers import BaseLayer
 from .utils import (add_on_change_callback, remove_callback,
-                    to_precomputed_mesh, find_name, parse_json_scene)
+                    find_name, parse_json_scene, import_optional)
 
 logger = logging.getLogger(__name__)
 
 __all__ = ['LocalScene', 'LocalSkeletonLayer', 'LocalMeshLayer',
            'LocalAnnotationLayer', 'BundleUpdates']
+
+
+def __getattr__(name):
+    # The source classes subclass neuroglancer classes, so they live in a
+    # separate module that is only imported when needed
+    if name in ('LocalMeshSource', 'LocalSkeletonSource'):
+        from . import _sources
+        return getattr(_sources, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def _xyz_dimensions(units, scales):
+    """Return neuroglancer x/y/z coordinate space."""
+    neuroglancer = import_optional('neuroglancer')
+    return neuroglancer.CoordinateSpace(names=['x', 'y', 'z'],
+                                        units=units,
+                                        scales=scales)
 
 
 class LocalMeshLayer(BaseLayer):
@@ -60,14 +71,13 @@ class LocalMeshLayer(BaseLayer):
                             'name': 'mesh'})
     MUST_HAVE = ['name', 'source']
 
-    NG_LAYER = neuroglancer.SegmentationLayer
+    NG_LAYER = "SegmentationLayer"
 
     def __init__(self, source, units='nm', scales=[1, 1, 1], **kwargs):
-        self.dimensions = neuroglancer.CoordinateSpace(names=['x', 'y', 'z'],
-                                                       units=units,
-                                                       scales=scales)
+        self.dimensions = _xyz_dimensions(units, scales)
         props = copy.deepcopy(self.DEFAULTS)
-        props['source'] = LocalMeshSource(source, self.dimensions, **kwargs)
+        from ._sources import LocalMeshSource
+        props['source'] = LocalMeshSource(source, self.dimensions)
         props.update(**kwargs)
         super().__init__(**props)
 
@@ -95,14 +105,13 @@ class LocalSkeletonLayer(BaseLayer):
                             'name': 'skeletons'})
     MUST_HAVE = ['name', 'source']
 
-    NG_LAYER = neuroglancer.SegmentationLayer
+    NG_LAYER = "SegmentationLayer"
 
     def __init__(self, source, units='nm', scales=[1, 1, 1], **kwargs):
-        self.dimensions = neuroglancer.CoordinateSpace(names=['x', 'y', 'z'],
-                                                       units=units,
-                                                       scales=scales)
+        self.dimensions = _xyz_dimensions(units, scales)
 
         props = copy.deepcopy(self.DEFAULTS)
+        from ._sources import LocalSkeletonSource
         props['source'] = LocalSkeletonSource(source, self.dimensions)
         props.update(**kwargs)
         super().__init__(**props)
@@ -142,19 +151,14 @@ class LocalAnnotationLayer(BaseLayer):
                             'name': 'annotations'})
     MUST_HAVE = ['name']
 
-    NG_LAYER = neuroglancer.AnnotationLayer
+    NG_LAYER = "AnnotationLayer"
 
     def __init__(self, units='nm', scales=[1, 1, 1], **kwargs):
-        self.dimensions = neuroglancer.CoordinateSpace(names=['x', 'y', 'z'],
-                                                       units=units,
-                                                       scales=scales)
+        self.dimensions = _xyz_dimensions(units, scales)
         props = copy.deepcopy(self.DEFAULTS)
         props.update(**kwargs)
         props['source']['transform'] = dict(outputDimensions=self.dimensions.to_json())
         super().__init__(**props)
-
-    def __init_layer__(self):
-        return self.NG_LAYER(source=self['source'])
 
     def __str__(self):
         return f'<{self.type}(name={self.name}, annotations={len(self.get("annotations", []))})>'
@@ -199,166 +203,6 @@ class CatmaidSkeletonLayer(LocalSkeletonLayer):
     pass
 
 
-class LocalMeshSource(neuroglancer.LocalVolume):
-    """A local mesh source."""
-
-    def __init__(self, source, dimensions, **kwargs):
-        if callable(source):
-            pass
-        else:
-            source = Path(source)
-            if source.is_file():
-                if not source.name.endswith('.zip'):
-                    raise ValueError(f'Invalid skeleton source: {source}')
-            elif not source.is_dir():
-                raise ValueError(f'Invalid skeleton source: {source}')
-
-        # Initialize with mock data
-        kwargs['volume_type'] = 'segmentation'
-        kwargs['dimensions'] = dimensions
-        super().__init__(np.random.randint(0, 100, size=(10, 10, 10), dtype=np.uint8), **kwargs)
-        self.source = source
-
-    def get_object_mesh(self, object_id):
-        """Read mesh for given object and return in precomputed format."""
-        if callable(self.source):
-            return self.source(object_id)
-        elif self.source.name.endswith('.zip'):
-            return self.read_from_zip(object_id)
-        else:
-            try:
-                # Try finding a file that has a matching name
-                file = next(self.source.glob(f'{object_id}.*')).name
-            except StopIteration:
-                print(f'Object {object_id} not found in directory.')
-                return None
-            try:
-                # Try reading that file
-                return self.read_file(file)
-            except BaseException:
-                print(f'File {file} could not be read.')
-                return None
-
-    def read_file(self, file):
-        """Read mesh from file."""
-        if not (self.source / file).is_file():
-            return None
-
-        mesh = tm.load_mesh(self.source / file)
-
-        return to_precomputed_mesh(mesh.vertices, mesh.faces)
-
-    def read_buffer(self, buffer, file_type):
-        """Read mesh from buffer."""
-        mesh = tm.load_mesh(buffer, file_type=file_type)
-
-        return to_precomputed_mesh(mesh.vertices, mesh.faces)
-
-    def read_from_zip(self, object_id):
-        """Read mesh from inside a ZIP archive.
-
-        Parameters
-        ----------
-        object_id :     str | int
-
-        Returns
-        -------
-        str
-                        Bytes string of precomputed format.
-
-        """
-        with ZipFile(self.source, 'r') as zip:
-            for file in zip.namelist():
-                if file.startswith(f'{object_id}.'):
-                    return self.read_buffer(io.StringIO(zip.read(file).decode()),
-                                            file_type=file.split('.')[-1])
-
-        print(f'File {file} not found in zip.')
-        return None
-
-
-class LocalSkeletonSource(neuroglancer.skeleton.SkeletonSource):
-    """A local skeleton source."""
-
-    def __init__(self, source, dimensions):
-        if callable(source):
-            pass
-        else:
-            source = Path(source)
-            if source.is_file():
-                if not source.name.endswith('.zip'):
-                    raise ValueError(f'Invalid skeleton source: {source}')
-            elif not source.is_dir():
-                raise ValueError(f'Invalid skeleton source: {source}')
-
-        super().__init__(dimensions)
-        self.source = source
-
-    def get_skeleton(self, id):
-        if callable(self.source):
-            return self.source(id)
-        elif self.source.name.endswith('.zip'):
-            return self.read_from_zip(f'{id}.swc')
-        else:
-            return self.read_from_swc(self.source / f'{id}.swc')
-
-    def read_from_zip(self, file):
-        """Read skeleton from SWC file inside a ZIP archive.
-
-        Parameters
-        ----------
-        file :      str
-
-        Returns
-        -------
-        neuroglancer.Skeleton
-
-        """
-        with ZipFile(self.source, 'r') as zip:
-            if file not in zip.namelist():
-                print(f'File {file} not found in zip.')
-                return None
-            return self.read_from_swc(io.StringIO(zip.read(file).decode()))
-
-    def read_from_swc(self, file):
-        """Read skeleton from SWC file (or buffer).
-
-        Parameters
-        ----------
-        file :      str
-
-        Returns
-        -------
-        neuroglancer.Skeleton
-
-        """
-        if isinstance(file, io.StringIO):
-            if isinstance(file.read(0), bytes):
-                file = io.TextIOWrapper(file, encoding="utf-8")
-        elif not (self.source / file).is_file():
-            return None
-
-        swc = pd.read_csv(file,
-                          delimiter=' ',
-                          skipinitialspace=True,
-                          comment='#',
-                          header=None)
-
-        swc.columns = ['PointNo', 'Label', 'X', 'Y', 'Z', 'Radius', 'Parent']
-
-        # Make sure points are in ascending order (should really already)
-        swc.sort_values('PointNo', inplace=True)
-
-        # In case node IDs start at 1
-        swc['Parent'] -= swc['PointNo'].min()
-        swc['PointNo'] -= swc['PointNo'].min()
-
-        return neuroglancer.skeleton.Skeleton(
-                                vertex_positions=swc[['X', 'Y', 'Z']].values,
-                                edges=swc.loc[swc.Parent >= 0,
-                                              ['Parent', 'PointNo']].values)
-
-
 class LocalScene(Scene):
     """A scene served via and synced to a local neuroglancer server.
 
@@ -396,6 +240,9 @@ class LocalScene(Scene):
         """Viewer instance for local neuroglancer server."""
         # Viewer will be spawned on first request
         if not self._viewer:
+            neuroglancer = import_optional('neuroglancer')
+            # Make sure neuroglancer can authenticate against graphene/DVID sources
+            from . import credentials  # noqa: F401
             self._viewer = neuroglancer.Viewer()
         return self._viewer
 
@@ -548,18 +395,29 @@ class LocalScene(Scene):
             logger.debug('Pushing state aborted: Scene locked')
             return
 
-        with self.viewer.txn() as s:
-            state = s.to_json()
-
         # Update state
         if exclude_layers:
             curr_state = self._state
         else:
             curr_state = self.as_dict()
 
-        state.update(remove_callback(curr_state))
+        ConcurrentModificationError = import_optional(
+            'neuroglancer.trackable_state').ConcurrentModificationError
 
-        self.viewer.set_state(state)
+        # Only overwrite the viewer state if it hasn't changed (e.g. in the
+        # browser) since we read it - otherwise retry with the newer state
+        for _ in range(10):
+            state, generation = self.viewer.shared_state.raw_state_and_generation
+            state = copy.deepcopy(state)
+            state.update(remove_callback(curr_state))
+            try:
+                self.viewer.set_state(state, existing_generation=generation)
+                break
+            except ConcurrentModificationError:
+                continue
+        else:
+            raise ConcurrentModificationError('Viewer state kept changing while pushing state.')
+        #print('State pushed. Layers excluded = ', exclude_layers)
         logger.debug(f'State pushed from scene {self}: {curr_state}')
 
     def pull_state(self, exclude_layers=True, on_error='raise'):
@@ -703,6 +561,7 @@ class BundleUpdates:
     def __enter__(self):
         self.scene.pull_state()
         self.scene._lock = True
+        #print('Locking')
         for l in self.scene.layers:
             l.pull_state()
             l._lock = True
@@ -710,6 +569,7 @@ class BundleUpdates:
     def __exit__(self, type, value, traceback):
         self.scene.push_state(exclude_layers=False, ignore_lock=True)
 
+        #print('Unlocking')
         self.scene._lock = False
         for l in self.scene.layers:
             l._lock = False

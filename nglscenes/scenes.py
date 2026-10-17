@@ -31,7 +31,6 @@ from .layers import (
 from .graphene import GrapheneSegmentationLayer
 from . import utils
 
-
 __all__ = ["Scene"]
 
 
@@ -295,9 +294,9 @@ class Scene:
                     Additional keyword arguments to pass to the Scene constructor.
 
         """
-        assert "id" in df.columns or "segment_id" in df.columns, (
-            'DataFrame must contain an "id" or "segment_id" column.'
-        )
+        assert (
+            "id" in df.columns or "segment_id" in df.columns
+        ), 'DataFrame must contain an "id" or "segment_id" column.'
         assert "source" in df.columns, 'DataFrame must contain a "source" column.'
 
         if layer_col is not None:
@@ -508,7 +507,7 @@ LAYER_FACTORY = {
 
 def parse_layers(layer, skip_unknown=False, skip_archived=True):
     if isinstance(layer, list):
-        res = [parse_layers(l, skip_archived=skip_archived) for l in layer]
+        res = [parse_layers(l, skip_unknown=skip_unknown, skip_archived=skip_archived) for l in layer]
         # Drop "None" if skip_unknown=True
         return [l for l in res if l]
 

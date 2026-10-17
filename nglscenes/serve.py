@@ -13,19 +13,21 @@
 #    GNU General Public License for more details.
 
 import copy
-import flask
 import logging
 import threading
 import socket
 import json
 import uuid
 
-from werkzeug.serving import make_server
-from flask_cors import CORS
 from collections import namedtuple, OrderedDict
 
 from .utils import (is_iterable, is_mesh, is_skeleton,
-                    to_precomputed_mesh, to_precomputed_skeleton, to_ng_skeleton)
+                    to_precomputed_mesh, to_precomputed_skeleton, to_ng_skeleton,
+                    import_optional)
+
+flask = import_optional('flask')
+CORS = import_optional('flask_cors').CORS
+make_server = import_optional('werkzeug.serving').make_server
 
 
 Source = namedtuple('source', ['name', 'manifest', 'data'])

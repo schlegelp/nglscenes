@@ -14,7 +14,7 @@
 """Collection of utility functions."""
 
 import functools
-import neuroglancer
+import importlib
 import requests
 import json
 
@@ -22,6 +22,43 @@ import numpy as np
 import pandas as pd
 
 from urllib.parse import urlparse, urlencode, unquote
+
+# Maps optional top-level modules to the extra that installs them
+OPTIONAL_DEPS = {
+    'neuroglancer': 'local',
+    'trimesh': 'local',
+    'cloudvolume': 'cave',
+    'flask': 'serve',
+    'flask_cors': 'serve',
+    'werkzeug': 'serve',
+}
+
+
+def import_optional(name):
+    """Import an optional dependency with a helpful error if it is missing.
+
+    Parameters
+    ----------
+    name :      str
+                Module to import, e.g. "neuroglancer" or "neuroglancer.skeleton".
+
+    Returns
+    -------
+    module
+
+    """
+    try:
+        return importlib.import_module(name)
+    except ModuleNotFoundError as e:
+        top = name.split('.')[0]
+        # Only intercept if it's the optional dependency itself that's missing
+        if e.name != top or top not in OPTIONAL_DEPS:
+            raise
+        extra = OPTIONAL_DEPS[top]
+        raise ModuleNotFoundError(
+            f'This feature requires "{top}", which is not installed. '
+            f'Install it with: pip install "nglscenes[{extra}]"',
+            name=top) from e
 
 
 class CallBackDict(dict):
@@ -225,8 +262,7 @@ def get_cave_credentials(domain='prod.flywire-daf.com'):
     token :     str
 
     """
-    # Lazy import
-    import cloudvolume as cv
+    cv = import_optional('cloudvolume')
 
     token = cv.secrets.cave_credentials(domain).get('token', None)
     if not token:
@@ -323,9 +359,9 @@ def find_name(name, scene, default):
     if not name:
         name = default
 
-    i = 1
+    base, i = name, 1
     while name in scene.layers:
-        name = f'skeletons{i}'
+        name = f'{base}{i}'
         i += 1
 
     return name
@@ -427,7 +463,8 @@ def to_ng_skeleton(x):
         raise TypeError(f'Unable to convert object of type "{type(x)}" to '
                         'neuroglancer skeleton.')
 
-    return neuroglancer.skeleton.Skeleton(
+    skeleton = import_optional('neuroglancer.skeleton')
+    return skeleton.Skeleton(
                             vertex_positions=vertices,
                             edges=edges)
 
