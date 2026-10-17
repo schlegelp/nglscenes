@@ -1,10 +1,5 @@
 requests
 cmap
-neuroglancer
 numpy
 pandas
 pyperclip
-trimesh
-flask
-flask-cors
-cloud-volume

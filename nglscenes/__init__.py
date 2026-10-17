@@ -19,4 +19,11 @@ from .graphene import *
 from .properties import *
 
 from . import examples
-from . import dvid
+
+
+def __getattr__(name):
+    # These require neuroglancer, so are only imported on demand
+    if name in ('dvid', 'credentials'):
+        import importlib
+        return importlib.import_module(f'.{name}', __name__)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

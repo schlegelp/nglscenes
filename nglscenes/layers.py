@@ -15,7 +15,6 @@
 import os
 import copy
 import logging
-import neuroglancer
 
 from abc import ABC
 from collections import OrderedDict
@@ -24,7 +23,7 @@ import numpy as np
 import pandas as pd
 from cmap import Color, Colormap
 
-from .utils import add_on_change_callback, remove_callback
+from .utils import add_on_change_callback, remove_callback, import_optional
 
 __all__ = ["ImageLayer", "SegmentationLayer", "AnnotationLayer", "MeshLayer"]
 
@@ -54,7 +53,8 @@ class BaseLayer(ABC):
     # always be a list of strings
     STATE_CONVERSION = {}
 
-    # This must be the corresponding layer in `neuroglancer`
+    # Name of the corresponding layer class in `neuroglancer`
+    # (resolved lazily since neuroglancer is an optional dependency)
     NG_LAYER = None
 
     # REMOVING THIS BREAKS COPYING
@@ -67,7 +67,14 @@ class BaseLayer(ABC):
         self.validate_properties()
 
     def __init_layer__(self):
-        return self.NG_LAYER(source=self["source"])
+        return self._ng_layer_class()(source=self["source"])
+
+    @classmethod
+    def _ng_layer_class(cls):
+        """Return the corresponding `neuroglancer` layer class."""
+        if not isinstance(cls.NG_LAYER, str):
+            return cls.NG_LAYER
+        return getattr(import_optional("neuroglancer"), cls.NG_LAYER)
 
     @property
     def name(self):
@@ -173,8 +180,12 @@ class BaseLayer(ABC):
 
         Any changes to this layer will propagate to the viewer.
         """
+        neuroglancer = import_optional("neuroglancer")
         if not isinstance(viewer, neuroglancer.Viewer):
             raise TypeError(f'Expected neuroglancer.Viewer, got "{type(viewer)}"')
+
+        # Make sure neuroglancer can authenticate against graphene/DVID sources
+        from . import credentials  # noqa: F401
 
         # Inject self into viewer:
         with viewer.txn() as s:
@@ -273,7 +284,7 @@ class ImageLayer(BaseLayer):
     )
     MUST_HAVE = ["name", "source"]
 
-    NG_LAYER = neuroglancer.ImageLayer
+    NG_LAYER = "ImageLayer"
 
     def __init__(self, source, **kwargs):
         props = copy.deepcopy(self.DEFAULTS)
@@ -326,7 +337,7 @@ class SegmentationLayer(BaseLayer):
         },
     }
 
-    NG_LAYER = neuroglancer.SegmentationLayer
+    NG_LAYER = "SegmentationLayer"
 
     def __init__(self, source, **kwargs):
         if isinstance(source, str):
@@ -513,7 +524,7 @@ class AnnotationLayer(BaseLayer):
     )
     MUST_HAVE = ["name", "source"]
 
-    NG_LAYER = neuroglancer.AnnotationLayer
+    NG_LAYER = "AnnotationLayer"
 
     def __init__(self, **kwargs):
         props = copy.deepcopy(self.DEFAULTS)
@@ -630,7 +641,7 @@ class MeshLayer(BaseLayer):
     DEFAULTS = OrderedDict({"source": "", "type": "mesh", "name": "meshes"})
     MUST_HAVE = ["name", "source"]
 
-    NG_LAYER = neuroglancer.SingleMeshLayer
+    NG_LAYER = "SingleMeshLayer"
 
     def __init__(self, source, **kwargs):
         props = copy.deepcopy(self.DEFAULTS)

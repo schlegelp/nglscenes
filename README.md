@@ -17,6 +17,21 @@ An interface to generate and manipulate [neuroglancer](https://github.com/google
 $ pip install nglscenes
 ```
 
+The base install is lightweight and covers constructing, parsing and
+manipulating scenes. Heavier dependencies are optional and can be installed
+via extras:
+
+| Extra     | Installs                  | Needed for                                          |
+|-----------|---------------------------|-----------------------------------------------------|
+| `local`   | `neuroglancer`, `trimesh` | `LocalScene` and local mesh/skeleton/annotation layers |
+| `cave`    | `cloud-volume`            | CAVE/graphene credentials (e.g. FlyWire) for local scenes |
+| `serve`   | `flask`, `flask-cors` + `local` | `nglscenes.viewer` (local data server)              |
+| `all`     | all of the above          |                                                     |
+
+```shell
+$ pip install "nglscenes[all]"
+```
+
 From Github:
 
 ```shell
