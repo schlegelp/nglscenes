@@ -1,3 +1,16 @@
+# 0.7.1
+
+- Fixed `scene1 | scene2` not merging anything: merged layers were computed
+  but never put back into the scene, so e.g. segments of segmentation layers
+  with the same source were not combined.
+- Merging segmentation layers with `|` now also keeps the segment colours
+  (`segmentColors`) of both layers and the order of the segments.
+- `SegmentationLayer` with a graphene source now returns a
+  `GrapheneSegmentationLayer` (set up for mainline neuroglancer), like parsing
+  the same state does. Previously, it gave a plain `SegmentationLayer` that
+  `Scene.for_viewer()` didn't convert. This replaces the warning for bare
+  `graphene://` sources.
+
 # 0.7.0
 
 - **Breaking:** parsed scenes now round-trip unchanged: layers read from a

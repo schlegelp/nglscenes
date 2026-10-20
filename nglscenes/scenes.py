@@ -119,16 +119,15 @@ class Scene:
         x = copy.deepcopy(self)
         for l1 in copy.deepcopy(other._layers):
             merged = False
-            for l2 in x.layers:
+            for i, l2 in enumerate(x._layers):
                 if isinstance(l1, type(l2)):
                     try:
-                        l2 |= l1
+                        # `__or__` returns a new layer: put it in the scene
+                        x._layers[i] = l2 | l1
                         merged = True
                         break
                     except NotImplementedError:
                         pass
-                    except BaseException:
-                        raise
             if not merged:
                 x.add_layers(l1)
 

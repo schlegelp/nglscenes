@@ -219,3 +219,44 @@ def test_compact_url_json():
     assert "%20" not in url
     assert _url_state(url) == PUBLISHED
     assert ": " in scene.to_json(pretty=True)
+
+
+# Merging with `|`
+def test_merge_combines_segments_and_colors():
+    src = "precomputed://gs://x/seg"
+    a = ngs.Scene()
+    a.add_layers(ngs.SegmentationLayer(source=src, segments=["1", "2"],
+                                       segmentColors={"1": "#0000ff"}))
+    b = ngs.Scene()
+    b.add_layers(ngs.SegmentationLayer(source=src, segments=["2", "3"],
+                                       segmentColors={"3": "#ff0000"}),
+                 ngs.SegmentationLayer(source="precomputed://gs://y/seg"))
+    merged = a | b
+    assert len(merged) == 2
+    assert merged.layers[0]["segments"] == ["1", "2", "3"]
+    assert merged.layers[0]["segmentColors"] == {"1": "#0000ff", "3": "#ff0000"}
+    # Inputs untouched
+    assert a.layers[0]["segments"] == ["1", "2"]
+    assert "3" not in a.layers[0]["segmentColors"]
+
+
+# Constructed layers with graphene sources behave like parsed ones
+@pytest.mark.parametrize("source", [
+    SPELUNKER_LAYER["source"]["url"],
+    SEUNGLAB_LAYER["source"],
+    SPELUNKER_LAYER["source"],
+])
+def test_segmentation_layer_with_graphene_source(source):
+    layer = ngs.SegmentationLayer(source=source, segments=["1"])
+    assert isinstance(layer, ngs.GrapheneSegmentationLayer)
+    assert layer.flavour == "mainline"
+    assert ngs.utils.source_urls(layer["source"])[0].startswith("graphene://middleauth+")
+    assert layer["segments"] == ["1"]
+
+    scene = ngs.Scene()
+    scene.add_layers(layer)
+    assert scene.for_viewer("seunglab").layers[0]["type"] == "segmentation_with_graph"
+
+    # Non-graphene sources are unaffected; copies keep their class
+    assert type(ngs.SegmentationLayer(source="precomputed://gs://x/seg")) is ngs.SegmentationLayer
+    assert type(copy.deepcopy(layer)) is ngs.GrapheneSegmentationLayer

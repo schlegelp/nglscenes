@@ -27,6 +27,7 @@ from .utils import (
     add_on_change_callback,
     remove_callback,
     import_optional,
+    is_graphene_source,
     source_urls,
 )
 
@@ -372,19 +373,18 @@ class SegmentationLayer(BaseLayer):
 
     NG_LAYER = "SegmentationLayer"
 
-    def __init__(self, source, **kwargs):
-        if any(
-            u.startswith("graphene://") and not u.startswith("graphene://middleauth+")
-            for u in source_urls(source)
-        ):
-            logger.warning(
-                "Looks like you want to generate segmentation layer "
-                "with a graphene (chunkedgraph) source. The "
-                "recommended way of doing this is using the "
-                "nglscenes.GrapheneSegmentationLayer class instead "
-                "of a basic SegmentationLayer."
-            )
+    def __new__(cls, *args, **kwargs):
+        # Graphene sources get a GrapheneSegmentationLayer, like parsed layers
+        # do. Python then runs its `__init__`, which sets the layer up for
+        # mainline neuroglancer.
+        source = kwargs.get("source", args[0] if args else None)
+        if cls is SegmentationLayer and is_graphene_source(source):
+            from .graphene import GrapheneSegmentationLayer
 
+            cls = GrapheneSegmentationLayer
+        return super().__new__(cls)
+
+    def __init__(self, source, **kwargs):
         props = copy.deepcopy(self.DEFAULTS)
         props["source"] = source
         props.update(**kwargs)
@@ -400,8 +400,15 @@ class SegmentationLayer(BaseLayer):
                 "Unable to combine segmentation layers with different sources"
             )
         x = copy.deepcopy(self)
-        # Combine selected segments
-        x["segments"] = list(set(x.get("segments", []) + other.get("segments", [])))
+        # Combine selected segments (keeping their order) and their colours
+        x["segments"] = list(
+            dict.fromkeys(x.get("segments", []) + other.get("segments", []))
+        )
+        if other.get("segmentColors"):
+            x["segmentColors"] = {
+                **x.get("segmentColors", {}),
+                **other["segmentColors"],
+            }
         return x
 
     def __setitem__(self, name, value):
