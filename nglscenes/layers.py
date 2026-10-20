@@ -23,9 +23,20 @@ import numpy as np
 import pandas as pd
 from cmap import Color, Colormap
 
-from .utils import add_on_change_callback, remove_callback, import_optional
+from .utils import (
+    add_on_change_callback,
+    remove_callback,
+    import_optional,
+    source_urls,
+)
 
-__all__ = ["ImageLayer", "SegmentationLayer", "AnnotationLayer", "MeshLayer"]
+__all__ = [
+    "ImageLayer",
+    "SegmentationLayer",
+    "AnnotationLayer",
+    "MeshLayer",
+    "GenericLayer",
+]
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +79,28 @@ class BaseLayer(ABC):
 
     def __init_layer__(self):
         return self._ng_layer_class()(source=self["source"])
+
+    @classmethod
+    def from_state(cls, state):
+        """Create layer from an existing (e.g. parsed) layer state.
+
+        In contrast to the constructor, this does not fill in any of the
+        layer's `DEFAULTS` or normalise values: the state is taken as is so
+        that it round-trips unchanged through `.as_dict()`.
+
+        Parameters
+        ----------
+        state :     dict
+                    The layer state.
+
+        """
+        if not isinstance(state, dict):
+            raise TypeError(f'Expected dict, got "{type(state)}"')
+
+        # Bypass the subclass constructor (which fills in DEFAULTS)
+        x = cls.__new__(cls)
+        BaseLayer.__init__(x, **copy.deepcopy(state))
+        return x
 
     @classmethod
     def _ng_layer_class(cls):
@@ -340,15 +373,17 @@ class SegmentationLayer(BaseLayer):
     NG_LAYER = "SegmentationLayer"
 
     def __init__(self, source, **kwargs):
-        if isinstance(source, str):
-            if source.startswith("graphene") and "middleauth" not in source:
-                logger.warning(
-                    "Looks like you want to generate segmentation layer "
-                    "with a graphene (chunkedgraph) source. The "
-                    "recommended way of doing this is using the "
-                    "nglscenes.GrapheneSegmentationLayer class instead "
-                    "of a basic SegmentationLayer."
-                )
+        if any(
+            u.startswith("graphene://") and not u.startswith("graphene://middleauth+")
+            for u in source_urls(source)
+        ):
+            logger.warning(
+                "Looks like you want to generate segmentation layer "
+                "with a graphene (chunkedgraph) source. The "
+                "recommended way of doing this is using the "
+                "nglscenes.GrapheneSegmentationLayer class instead "
+                "of a basic SegmentationLayer."
+            )
 
         props = copy.deepcopy(self.DEFAULTS)
         props["source"] = source
@@ -366,7 +401,7 @@ class SegmentationLayer(BaseLayer):
             )
         x = copy.deepcopy(self)
         # Combine selected segments
-        x["segments"] = list(set(x["segments"] + other["segments"]))
+        x["segments"] = list(set(x.get("segments", []) + other.get("segments", [])))
         return x
 
     def __setitem__(self, name, value):
@@ -374,12 +409,8 @@ class SegmentationLayer(BaseLayer):
         super().__setitem__(name, value)
 
     def __str__(self):
-        source = self["source"]
-        if isinstance(source, list):
-            source = source[0]
-
-        if isinstance(source, dict):
-            source = source.get("url", source)
+        urls = source_urls(self["source"])
+        source = urls[0] if urls else self["source"]
 
         return f"<{self.type}(name={self.name}, source={source}, selected segments={len(self.get('segments', []))})>"
 
@@ -490,7 +521,7 @@ class SegmentationLayer(BaseLayer):
 
         # Assign colors
         self["segmentColors"] = {
-            str(s): _to_hex(colors[v]) for s, v in zip(self["segments"], x)
+            str(s): _to_hex(colors[v]) for s, v in zip(self.get("segments", []), x)
         }
 
     def clear_colors(self):
@@ -593,6 +624,9 @@ class AnnotationLayer(BaseLayer):
         if not isinstance(points, list):
             raise TypeError("Points must be a list of (x, y, z) tuples.")
 
+        # Parsed layers (e.g. with remote annotations) may not have this
+        self.state.setdefault("annotations", [])
+
         for point in points:
             if len(point) == 3:
                 annotation = {
@@ -621,11 +655,12 @@ class AnnotationLayer(BaseLayer):
         """Convert annotations in the layer to a pandas DataFrame."""
 
         if self.state.get("tool", None) == "annotatePoint":
+            annotations = self.state.get("annotations", [])
             df = pd.DataFrame()
-            df["id"] = [a["id"] for a in self.state["annotations"]]
-            df["x"] = [a["point"][0] for a in self.state["annotations"]]
-            df["y"] = [a["point"][1] for a in self.state["annotations"]]
-            df["z"] = [a["point"][2] for a in self.state["annotations"]]
+            df["id"] = [a["id"] for a in annotations]
+            df["x"] = [a["point"][0] for a in annotations]
+            df["y"] = [a["point"][1] for a in annotations]
+            df["z"] = [a["point"][2] for a in annotations]
         else:
             raise NotImplementedError(
                 f"Converting {self.state.get('tool', 'NA')} annotations "
@@ -648,6 +683,27 @@ class MeshLayer(BaseLayer):
         props["source"] = source
         props.update(**kwargs)
         super().__init__(**props)
+
+
+class GenericLayer(BaseLayer):
+    """Layer of a type nglscenes has no dedicated class for.
+
+    The state is stored and returned verbatim. This is used, for example,
+    to carry layers of unknown types (e.g. neuroglancer's "new" layers which
+    have not yet been given a source) through parsing.
+
+    """
+
+    MUST_HAVE = ["name", "type"]
+
+    def __init_layer__(self):
+        raise NotImplementedError(
+            f'Unable to link layer "{self.name}" of type "{self["type"]}" '
+            "to a neuroglancer viewer."
+        )
+
+    def __str__(self):
+        return f"<{self.type}(name={self.name}, type={self['type']})>"
 
 
 class LayerManager:

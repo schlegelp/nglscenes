@@ -278,6 +278,41 @@ def is_url(x):
     except BaseException:
         return False
 
+def source_urls(source):
+    """Return the URL(s) of a layer source.
+
+    Sources can be a string, a dict with a `url` or a list of either.
+    """
+    if isinstance(source, str):
+        return [source]
+    elif isinstance(source, dict):
+        return [source['url']] if 'url' in source else []
+    elif isinstance(source, list):
+        return [u for s in source for u in source_urls(s)]
+    raise TypeError(f'Unexpected source type "{type(source)}"')
+
+
+def map_source_urls(source, func):
+    """Apply `func` to the URL(s) of a source, keeping its shape."""
+    if isinstance(source, str):
+        return func(source)
+    elif isinstance(source, dict):
+        if 'url' in source:
+            source = {**source, 'url': func(source['url'])}
+        return source
+    elif isinstance(source, list):
+        return [map_source_urls(s, func) for s in source]
+    raise TypeError(f'Unexpected source type "{type(source)}"')
+
+
+def is_graphene_source(source):
+    """Check if source points to a graphene (chunkedgraph) segmentation."""
+    try:
+        return any(u.startswith('graphene://') for u in source_urls(source))
+    except TypeError:
+        return False
+
+
 def is_state_url(x):
     """Check if URL points to a state server."""
     if not is_url(x):

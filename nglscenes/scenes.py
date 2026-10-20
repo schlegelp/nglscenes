@@ -16,9 +16,8 @@ import copy
 import json
 import pyperclip
 import webbrowser
-import inspect
 
-from urllib.parse import quote, urldefrag
+from urllib.parse import quote, urldefrag, urlparse, urlunparse
 
 from .layers import (
     ImageLayer,
@@ -26,6 +25,7 @@ from .layers import (
     AnnotationLayer,
     MeshLayer,
     BaseLayer,
+    GenericLayer,
     LayerManager,
 )
 from .graphene import GrapheneSegmentationLayer
@@ -48,7 +48,7 @@ class Scene:
     _state = {}
 
     def __init__(self, base_url="https://neuroglancer-demo.appspot.com/", **kwargs):
-        self._base_url = base_url
+        self.base_url = base_url
         self._layers = []
         self.state = kwargs
         self._url = ""
@@ -83,6 +83,18 @@ class Scene:
     @property
     def type(self):
         return self.__class__.__name__
+
+    @property
+    def base_url(self):
+        """URL of the neuroglancer instance (host or page) for `.url`."""
+        return self._base_url
+
+    @base_url.setter
+    def base_url(self, value):
+        if not isinstance(value, str):
+            raise TypeError(f'Expected str, got "{type(value)}"')
+        self._base_url = value
+        self._stale = True
 
     @property
     def url(self):
@@ -206,52 +218,73 @@ class Scene:
         return f'&lt;nglscenes.{type(self).__name__}(layers={layer_str}; url=<a href="{self.url}" target="_blank">{url}</a>)&gt;'
 
     @classmethod
-    def from_clipboard(cls):
+    def from_clipboard(cls, base_url=None):
         """Generate scene from either a JSON or URL on the clipboard."""
         # Read clipboard
         scene = pyperclip.paste()
 
-        return cls.from_string(scene)
+        return cls.from_string(scene, base_url=base_url)
 
     @classmethod
-    def from_dict(cls, dict):
-        """Generate scene from a state dict."""
-        return cls.from_string(dict)
+    def from_dict(cls, dict, base_url=None):
+        """Generate scene from a state dict.
+
+        Parameters
+        ----------
+        dict :          dict
+                        The state. Not modified.
+        base_url :      str, optional
+                        URL of the neuroglancer instance to use for the
+                        scene's URL.
+
+        """
+        return cls.from_string(dict, base_url=base_url)
 
     @classmethod
-    def from_file(cls, fp):
+    def from_file(cls, fp, base_url=None):
         """Generate scene from a file."""
         with open(fp, "r") as f:
             scene = json.load(f)
 
-        return cls.from_string(scene)
+        return cls.from_string(scene, base_url=base_url)
 
     @classmethod
-    def from_string(cls, string, skip_archived=False):
+    def from_string(cls, string, skip_archived=False, base_url=None):
         """Generate scene from either a JSON or URL.
 
         Parameters
         ----------
         string :        str | dict
-                        Either a JSON-formatted string or a URL containing
-                        a JSON fragment.
+                        Either a JSON-formatted string, a state dict or a URL
+                        containing a JSON fragment.
         skip_archived : bool, optional
                         If True, skip archived layers. Default: False.
+        base_url :      str, optional
+                        URL of the neuroglancer instance to use for the
+                        scene's URL. If not provided and `string` is a URL,
+                        will reuse that URL's base.
 
         """
         # Extract json
         state = utils.parse_json_scene(string)
 
-        # If input is URL, reuse the base URL
-        sig = inspect.signature(cls)
-        has_url = "url" in sig.parameters or "base_url" in sig.parameters
-        if utils.is_url(string) and has_url:
-            url, frag = urldefrag(string)
-            x = cls(base_url=url)
-        else:
-            x = cls()
+        # Neuroglancer accepts `layers` as a list or a `{name: layer}` map
+        layers = state.get("layers", [])
+        if isinstance(layers, dict):
+            layers = [{**v, "name": k} for k, v in layers.items()]
 
-        layers = parse_layers(state.pop("layers", []), skip_archived=skip_archived)
+        # Copy so we don't modify the input (layers are copied when parsed)
+        state = {k: copy.deepcopy(v) for k, v in state.items() if k != "layers"}
+
+        if base_url is None and utils.is_url(string):
+            # If input is URL, reuse the base URL
+            base_url = urldefrag(string).url
+
+        x = cls()
+        if base_url is not None:
+            x.base_url = base_url
+
+        layers = parse_layers(layers, skip_archived=skip_archived)
 
         # Update properties
         x._state.update(state)
@@ -262,7 +295,7 @@ class Scene:
         return x
 
     @classmethod
-    def from_url(cls, url, skip_archived=False):
+    def from_url(cls, url, skip_archived=False, base_url=None):
         """Generate scene from URL.
 
         Parameters
@@ -271,9 +304,12 @@ class Scene:
                         The URL.
         skip_archived : bool, optional
                         If True, skip archived layers. Default: False.
+        base_url :      str, optional
+                        URL of the neuroglancer instance to use for the
+                        scene's URL. Defaults to the base of `url`.
 
         """
-        return cls.from_string(url, skip_archived=skip_archived)
+        return cls.from_string(url, skip_archived=skip_archived, base_url=base_url)
 
     @classmethod
     def from_pandas(cls, df, layer_col=None, color_col=None, **kwargs):
@@ -377,6 +413,32 @@ class Scene:
         """Return copy."""
         return copy.deepcopy(self)
 
+    def for_viewer(self, flavour):
+        """Return copy of the scene with graphene layers converted for a viewer.
+
+        The two neuroglancer families spell CAVE chunkedgraph layers
+        differently and each refuses the other's spelling. This converts every
+        `GrapheneSegmentationLayer` for the target family. Other layers are
+        left untouched.
+
+        Parameters
+        ----------
+        flavour :   "spelunker" | "mainline" | "seunglab"
+                    See `GrapheneSegmentationLayer.as_flavour`.
+
+        Returns
+        -------
+        Scene
+
+        """
+        x = self.copy()
+        x._layers = [
+            l.as_flavour(flavour) if isinstance(l, GrapheneSegmentationLayer) else l
+            for l in x._layers
+        ]
+        x._stale = True
+        return x
+
     def drop_layer(self, which):
         """Remove layer from scene.
 
@@ -448,6 +510,8 @@ class Scene:
         return json.dumps(
             self.as_dict(),
             indent=4 if pretty else None,
+            # Compact separators keep URLs short
+            separators=None if pretty else (",", ":"),
             sort_keys=True,
         )
 
@@ -468,7 +532,14 @@ class Scene:
     def make_url(self):
         """Generate/Update URL."""
         scene_str = self.to_json(pretty=False)
-        self._url = utils.make_url(self._base_url, f"#!{quote(scene_str)}")
+        # The state is a fragment, not a path segment: append it to the base
+        # as given (e.g. ".../neuroglancer.html#!...") replacing any existing
+        # fragment. Only a bare host gets a trailing slash.
+        base = urlparse(urldefrag(self._base_url).url)
+        if not base.path:
+            base = base._replace(path="/")
+        base = urlunparse(base)
+        self._url = f"{base}#!{quote(scene_str)}"
         self._stale = False
         return self._url
 
@@ -506,6 +577,21 @@ LAYER_FACTORY = {
 
 
 def parse_layers(layer, skip_unknown=False, skip_archived=True):
+    """Parse layer state(s) into layer objects.
+
+    Layer states are taken as is (see `BaseLayer.from_state`).
+
+    Parameters
+    ----------
+    layer :         dict | list
+                    A single layer state or a list thereof.
+    skip_unknown :  bool
+                    If True, skip layers of unknown type. If False (default),
+                    they are kept as `GenericLayer`.
+    skip_archived : bool
+                    If True, skip archived layers.
+
+    """
     if isinstance(layer, list):
         res = [parse_layers(l, skip_unknown=skip_unknown, skip_archived=skip_archived) for l in layer]
         # Drop "None" if skip_unknown=True
@@ -518,12 +604,17 @@ def parse_layers(layer, skip_unknown=False, skip_archived=True):
     if layer.get("archived", False) and skip_archived:
         return
 
-    ty = layer.get("type", "NA")
+    ty = layer.get("type")
     if ty not in LAYER_FACTORY:
         if skip_unknown:
             return
-        raise ValueError(
-            f'Unable to parse layer "{layer.get("name", "")}" of type "{ty}"'
-        )
+        if ty is None:
+            raise ValueError(f'Layer "{layer.get("name", "")}" has no type')
+        return GenericLayer.from_state(layer)
 
-    return LAYER_FACTORY[ty](**layer)
+    cls = LAYER_FACTORY[ty]
+    # Mainline neuroglancer writes graphene layers as plain segmentation
+    if cls is SegmentationLayer and utils.is_graphene_source(layer.get("source")):
+        cls = GrapheneSegmentationLayer
+
+    return cls.from_state(layer)

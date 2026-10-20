@@ -1,4 +1,29 @@
-# Unreleased
+# 0.7.0
+
+- **Breaking:** parsed scenes now round-trip unchanged: layers read from a
+  state (`Scene.from_dict`, `from_string`, `from_url`, ...) no longer get the
+  constructor defaults (`selectedAlpha`, `segments`, `blend`, `shaderControls`,
+  `annotations`) filled in. New `BaseLayer.from_state()` for this.
+- **Breaking:** parsed graphene layers keep their type and source as written
+  (no more `segmentation_with_graph` -> `segmentation` or added
+  `middleauth+`). Use the new `Scene.for_viewer("spelunker" | "seunglab")` or
+  `GrapheneSegmentationLayer.as_flavour()` to convert explicitly. Plain
+  `segmentation` layers with a graphene source now parse as
+  `GrapheneSegmentationLayer`.
+- `GrapheneSegmentationLayer` accepts object (`{url, subsources}`) and list
+  sources.
+- Layers of unknown type (e.g. neuroglancer's `new`) are carried through as
+  `GenericLayer` instead of failing the whole parse.
+- `layers` given as a `{name: layer}` map are now parsed.
+- New `base_url` parameter for `Scene.from_dict`/`from_string`/`from_url`/
+  `from_file`/`from_clipboard` and a public `Scene.base_url` property.
+- Fixed URLs for page bases: `.../neuroglancer.html` now gives
+  `.../neuroglancer.html#!...` instead of `.../neuroglancer.html/#!...`.
+- URLs use compact JSON (no spaces after `,`/`:`); `to_json(pretty=False)`
+  is compact too.
+- `Scene.from_dict` no longer modifies the input dictionary.
+
+# 0.6.0
 
 - **Breaking:** `neuroglancer`, `trimesh`, `cloud-volume`, `flask` and
   `flask-cors` are now optional dependencies and are imported lazily, which
